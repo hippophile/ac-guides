@@ -1,185 +1,173 @@
-# The Ultimate Guideline for High-Efficiency Agentic Coding
+# Agentic Coding Standards for Banking AI Systems
 
-This document outlines the "Agentic Standard" to make coding with AI agents (Claude Code, Aider, Cursor) more efficient, less costly, and significantly higher quality.
-
----
-
-## 1. Core Principles (The Foundation)
-
-* **Modular, Small Functions**
-    * **Γιατί:** Τα AI agents έχουν περιορισμένο "context window". Τα μικρά functions επιτρέπουν στο μοντέλο να εστιάζει σε ένα συγκεκριμένο logic unit χωρίς να χάνεται σε εκατοντάδες γραμμές άσχετου κώδικα[cite: 1].
-* **Strong Typing (TypeScript, Python Type Hints, etc.)**
-    * **Γιατί:** Οι τύποι λειτουργούν ως "εγγυήσεις" για το AI. Καταλαβαίνει αμέσως τι δεδομένα μπαίνουν και βγαίνουν, μειώνοντας τις πιθανότητες να προτείνει κώδικα που σπάει το runtime[cite: 1].
-* **Semantic Naming**
-    * **Γιατί:** Το AI βασίζεται σε "token embeddings". Ονόματα όπως `userPurchaseHistory` επιτρέπουν στο μοντέλο να αντλήσει τη γνώση του για το domain, αντί να μαντεύει τι κάνει το `x`[cite: 1].
-* **Docstrings with "Intent"**
-    * **Γιατί:** Το AI διαβάζει τα σχόλια ως οδηγίες. Εξηγώντας το "γιατί" (intent) και όχι μόνο το "τι", βοηθάς τον agent να διατηρήσει τη λογική συνοχή κατά το refactoring[cite: 1].
-* **Standardized Error Handling**
-    * **Γιατί:** Τα σαφή errors επιτρέπουν στον agent να διαβάσει το stack trace και να αυτο-διορθωθεί (self-heal) χωρίς ανθρώπινη παρέμβαση[cite: 1].
+This guide defines the **AICoE Agentic Standard** — a set of principles and practices that make building AI systems with coding agents (Claude Code, Cursor, Aider, GitHub Copilot) more efficient, more auditable, and significantly higher quality in a regulated banking environment.
 
 ---
 
-## 2. Advanced Workflow (Efficiency & Productivity)
+## 1. Core Coding Principles
+
+These are the non-negotiables. Every AI-assisted codebase in the bank should follow them.
+
+### Modular, Small Functions
+**Rule:** Keep functions focused on doing exactly one thing.
+
+**Why it matters:** AI coding agents have a limited "context window" — the amount of code they can hold in memory at once. Small, focused functions let the model reason about a single unit of logic without losing track of what's happening elsewhere. In a banking context, this also makes compliance reviews and security audits far easier.
+
+---
+
+### Strong Typing (TypeScript, C# types, Python Type Hints)
+**Rule:** Always define the types for inputs and outputs explicitly.
+
+**Why it matters:** Types act as a contract the AI cannot violate. When a function signature says `CalculateCreditScore(CustomerId: string, Income: decimal): RiskScore`, the agent immediately understands what goes in and what comes out — no guessing, no hallucinations about data shapes. For regulatory systems, this is essential.
+
+---
+
+### Semantic Naming
+**Rule:** Name variables and functions as if explaining them to a new colleague — not `x`, `tmp`, or `calc1`.
+
+**Why it matters:** AI models rely on the meaning embedded in names. `CustomerLoanRejectionReason` tells the model everything about intent; `res` tells it nothing. Good names also make audit trails self-documenting.
+
+---
+
+### Docstrings with Intent (The "Why", not just the "What")
+**Rule:** Every function should have a docstring that explains *why* it exists, not just what it does.
+
+**Why it matters:** When an AI agent reads code to perform a refactor, it reads comments as instructions. If you only document *what* the code does, the agent may refactor it correctly but destroy the business intent. In banking, the intent often carries regulatory meaning.
+
+**Example:**
+```csharp
+/// <summary>
+/// Applies the EBA-compliant income threshold check for retail loan eligibility.
+/// Per Regulation (EU) 2023/2631, rejections must be explainable and documented.
+/// </summary>
+public LoanDecision EvaluateLoanEligibility(CustomerProfile customer) { ... }
+```
+
+---
+
+### Standardized Error Handling
+**Rule:** Use consistent, descriptive error types across the codebase. Never swallow exceptions silently.
+
+**Why it matters:** Clear, structured errors allow the agent to read a stack trace and self-correct without human intervention. In production banking systems, they also feed into your incident management and audit logs.
+
+---
+
+## 2. Workflow Practices
 
 ### The Single Responsibility Rule
-* **Guideline:** Keep files under 200–300 lines and focused on one task[cite: 1].
-* **Γιατί:** Το AI μπορεί να "κρατήσει" ολόκληρο το αρχείο στη μνήμη του χωρίς να "ξεχνάει" την αρχή του κώδικα καθώς προχωράει προς το τέλος[cite: 1].
+**Rule:** Keep files under 200–300 lines, each focused on one domain concept.
 
-### Descriptive READMEs & Architecture Maps
-* **Guideline:** Always maintain an updated `README.md` or `architecture.md` explaining how parts of the app interact[cite: 1].
-* **Γιατί:** Λειτουργεί ως "χάρτης". Ο agent ξέρει αμέσως ποια αρχεία να πειράξει, εξοικονομώντας tokens και χρόνο[cite: 1].
-
-### Pure Functions & Side-Effect Isolation
-* **Guideline:** Avoid hidden global state changes; use explicit inputs and outputs[cite: 1].
-* **Γιατί:** Τα "side effects" είναι η κύρια αιτία bugs από AI. Η προβλέψιμη λειτουργικότητα επιτρέπει στο AI να γράφει unit tests που όντως λειτουργούν[cite: 1].
-
-### The "Test-Driven Agent" Loop
-* **Guideline:** Ensure commands like `npm test` or `pytest` are operational before starting the agent[cite: 1].
-* **Γιατί:** Επιτρέπει τον κύκλο: *Code -> Test -> Error -> Fix*. Χωρίς tests, ο agent εργάζεται "στα τυφλά"[cite: 1].
+**Why it matters:** A focused file means the AI agent can hold the entire file in its context window. When a file grows beyond ~300 lines, the agent starts "forgetting" the beginning as it reaches the end, which introduces subtle bugs.
 
 ---
 
-## 3. Cost & Optimization Checklist
+### Always Keep an Architecture Map
+**Rule:** Maintain an up-to-date `architecture.md` or `README.md` that explains how the system's components interact.
 
-| Strategy | Impact | Implementation |
+**Why it matters:** This acts as a navigation map for the agent. Instead of reading every file to understand the system, it reads the architecture doc first and knows exactly which files are relevant to the current task — saving tokens, time, and money.
+
+---
+
+### Pure Functions and Isolated Side Effects
+**Rule:** Avoid hidden global state mutations. Functions should take explicit inputs and produce explicit outputs.
+
+**Why it matters:** Side effects (writing to a database, mutating a shared object, calling an external API) are the primary source of AI-introduced bugs. Pure, predictable functions allow the agent to write unit tests that actually work and give regulators clear data flow to audit.
+
+---
+
+### The Test-First Loop
+**Rule:** Before starting any agent session, ensure your test suite (`dotnet test`, `pytest`, `npm test`) is fully operational.
+
+**Why it matters:** This enables the feedback loop: *Write Code → Run Tests → See Errors → Fix*. Without working tests, the agent has no ground truth to validate against. It works blind, and so do you.
+
+---
+
+## 3. Cost & Quality Cheat Sheet
+
+| Strategy | Impact | What to Do |
 | :--- | :--- | :--- |
-| **Session Resets** | **-50% Costs** | Restart the agent session frequently to clear old chat history tokens[cite: 1]. |
-| **Small Files** | **-30% Costs** | Keep context windows small so the agent reads less "noise"[cite: 1]. |
-| **Strict Schemas** | **+40% Quality** | Use Zod or Pydantic to define data shapes strictly[cite: 1]. |
-| **Failing Tests First** | **+50% Speed** | Never ask for a fix without a failing test to guide the agent[cite: 1]. |
+| **Session Resets** | −50% Token Cost | Restart the agent session after each merged task to clear accumulated chat history |
+| **Small Files** | −30% Token Cost | Keep files focused and short so the agent reads less noise |
+| **Strict Type Schemas** | +40% Output Quality | Use Zod (TS), Pydantic (Python), or record types (C#) to define all data shapes |
+| **Failing Tests First** | +50% Fix Speed | Never ask the agent to fix a bug without a failing test to guide it |
+| **Architecture Doc** | +35% Precision | A good architecture.md dramatically reduces irrelevant file reads |
 
 ---
 
-## 4. Summary for Terminal Interaction
-- **Be Explicit:** Don't let the agent guess your tech stack or patterns[cite: 1].
-- **Keep it Atomic:** Small changes are easier for agents to verify and cheaper to process[cite: 1].
-- **Provide Metadata:** Use types and docs as "anchors" for the model's reasoning[cite: 1].
+## 4. Environment Setup
 
-# Agentic Coding: System & Interaction Guidelines
+### Use Project-Level Config Files
+**Rule:** Use tool-specific config files (`.claudecode/config`, `.aider.conf.yml`, `.cursorrules`) to define coding standards once.
 
-These practices focus on the environment and communication flow to ensure the agent operates with maximum precision and minimum waste.
-
-## 1. System & Environment Control
-
-* **Custom Instructions & Config Files**
-    * **Guideline:** Use project-specific configuration files (like `.claudecode/config` or `.aider.conf.yml`) to pre-define coding styles and mandatory libraries[cite: 1].
-    * **Γιατί:** Μειώνει την ανάγκη να επαναλαμβάνεις οδηγίες σε κάθε session, εξοικονομώντας tokens και διασφαλίζοντας συνέπεια στον κώδικα[cite: 1].
-* **Environment Mocking**
-    * **Guideline:** Provide the agent with mock data or a "sandbox" database for testing purposes[cite: 1].
-    * **Γιατί:** Αποτρέπει τον agent από το να καταναλώνει tokens προσπαθώντας να διορθώσει προβλήματα υποδομής ή σύνδεσης αντί για τον ίδιο τον κώδικα[cite: 1].
-* **Log Verbosity**
-    * **Guideline:** Ensure your application supports detailed logging or a `--verbose` flag[cite: 1].
-    * **Γιατί:** Τα αναλυτικά logs επιτρέπουν στον agent να κάνει "reasoning" πάνω στο τι πήγε στραβά κατά την εκτέλεση, αντί να κάνει υποθέσεις[cite: 1].
+**Why it matters:** You stop repeating instructions in every session. The agent knows your tech stack, your libraries, and your constraints from the first token. Saves cost, ensures consistency.
 
 ---
 
-## 2. Communication & Interaction Strategy
+### Always Use a Sandbox / Mock Environment
+**Rule:** Give the agent mock data or a sandbox database, never production access during development.
 
-* **"Chain-of-Thought" Planning**
-    * **Guideline:** Command the agent to "Plan your approach in a comment block" before it writes any executable code[cite: 1].
-    * **Γιατί:** Αναγκάζει το μοντέλο να οριστικοποιήσει τη λογική του πριν δεσμευτεί σε κώδικα, μειώνοντας τα δομικά λάθη[cite: 1].
-* **Knowledge Cutoff Awareness**
-    * **Guideline:** Explicitly state the exact versions of the libraries you are using (e.g., "We are using Next.js 15")[cite: 1].
-    * **Γιατί:** Αποφεύγονται τα σφάλματα από παρωχημένες μεθόδους (deprecated code) που το AI ίσως προτείνει λόγω παλιών δεδομένων εκπαίδευσης[cite: 1].
-* **Incremental Task Breaking**
-    * **Guideline:** Break large features into small, verifiable chunks (e.g., "Create the schema first," then "Write the logic")[cite: 1].
-    * **Γιατί:** Τα μικρά tasks έχουν πολύ υψηλότερο ποσοστό επιτυχίας και αποτρέπουν το "logic drift" και το context overload[cite: 1].
+**Why it matters:** Agents waste tokens debugging infrastructure issues (connection strings, permissions, firewall rules) instead of the actual code. In banking, sandbox environments are also a compliance requirement.
 
 ---
 
-## 3. Interaction Checklist
+### Enable Verbose Logging
+**Rule:** Your application should support a `--verbose` or `DEBUG` mode that outputs detailed execution traces.
 
-| Strategy | Impact | Outcome |
+**Why it matters:** Logs are the agent's debugging eyes. Without them, it makes assumptions about what went wrong. With them, it reasons directly from evidence.
+
+---
+
+## 5. AI-Specific Risks in Banking Systems
+
+These are issues unique to using AI coding agents in a regulated environment:
+
+| Risk | What Happens | How to Mitigate |
 | :--- | :--- | :--- |
-| **Config Files** | High Efficiency | Consistent style across all AI-generated files[cite: 1]. |
-| **Mock Sandboxes** | Lower Costs | Verifies code instantly without network or API blockers[cite: 1]. |
-| **Step-by-Step Tasking** | Better Quality | Prevents hallucinations and logic errors in complex features[cite: 1]. |
-
-# Agentic Coding: The Verification & Maintenance Layer
-
-This section ensures that AI-generated code remains maintainable, secure, and integrated correctly over time.
-
-## 1. Post-Generation Verification
-
-* **The "Diff" Review**
-    * **Guideline:** Always use a tool that shows a `git diff` or a file preview before committing AI changes[cite: 1].
-    * **Γιατί:** Σου επιτρέπει να εντοπίσεις αν ο agent πρόσθεσε περιττά "noise" imports ή άλλαξε άσχετα σημεία του κώδικα που αυξάνουν το μελλοντικό κόστος[cite: 1].
-* **Automated Linting Fixes**
-    * **Guideline:** Run `eslint --fix` or `black` immediately after the agent finishes a task[cite: 1].
-    * **Γιατί:** Διασφαλίζει ότι ο κώδικας του AI ακολουθεί τους κανόνες του project σου, εμποδίζοντας τον agent να "μπερδευτεί" αργότερα από ασυνεπές formatting[cite: 1].
-* **Security Scanning**
-    * **Guideline:** Periodically run tools like `snyk` or `npm audit` on agent-generated dependencies[cite: 1].
-    * **Γιατί:** Τα AI agents συχνά προτείνουν πακέτα που μπορεί να έχουν ευπάθειες αν δεν τους ζητηθεί ρητά η χρήση ασφαλών εκδόσεων[cite: 1].
+| **Hallucinated Dependencies** | Agent adds a library that doesn't exist or has vulnerabilities | Run `dotnet audit` / `npm audit` after every agent session |
+| **Logic Drift** | Agent slowly changes business logic across sessions | Commit small, atomic changes and review every `git diff` before merging |
+| **Deprecated APIs** | Agent uses outdated library versions from its training data | Always specify exact versions: "We use .NET 8, EF Core 8.0.4" |
+| **Silent Overwrites** | Agent removes existing compliance comments | Always use a diff review tool before committing |
+| **Context Overload** | Agent "forgets" early instructions in a long session | Reset sessions frequently; use config files for persistent rules |
 
 ---
 
-## 2. Long-term Maintenance
+## 6. Post-Generation Verification Checklist
 
-* **Context Cleaning (The "Pruning" Rule)**
-    * **Guideline:** Regularly delete old, experimental branches or temporary test files created by the agent[cite: 1].
-    * **Γιατί:** Μειώνει τον όγκο των αρχείων που πρέπει να σκανάρει ο agent στο terminal, κάνοντας την αναζήτηση (search) πιο γρήγορη και φθηνή[cite: 1].
-* **Session Resetting**
-    * **Guideline:** Restart your agent session (clear the chat history) as soon as a specific task is merged[cite: 1].
-    * **Γιατί:** Εξοικονομεί έως και 50% στο κόστος των API tokens, καθώς σταματά την αποστολή τεράστιων ιστορικών συνομιλίας σε κάθε νέα εντολή[cite: 1].
-* **Feedback Loops**
-    * **Guideline:** If an agent consistently makes the same mistake, update your `.claudecode/config` or `README.md` with a "Never do X" instruction[cite: 1].
-    * **Γιατί:** Μετατρέπει τα λάθη σε μόνιμη γνώση για το project, εμποδίζοντας την επανάληψη δαπανηρών σφαλμάτων[cite: 1].
+Before any AI-generated code touches a staging or production system:
 
----
-
-## 3. Final Verification Checklist
-
-| Strategy | Impact | Outcome |
-| :--- | :--- | :--- |
-| **Git Diff Review** | High Safety | Prevents "accidental" deletions or logic overwrites[cite: 1]. |
-| **Linting/Formatting** | High Consistency | Keeps the codebase readable for both humans and future AI sessions[cite: 1]. |
-| **Session Cleaning** | Lower Costs | Keeps the token count low and the agent's focus sharp[cite: 1]. |
-
-# Instructions for Context Window Minimization & OpenSpec at 110%
-
-To reach maximum efficiency, you must treat your **OpenAPI/OpenSpec** as a "live" contract that restricts the AI's search space and ensures surgical precision.
+- [ ] Run `git diff` — check every changed line, including files you didn't ask the agent to touch
+- [ ] Run linting (`dotnet format`, `eslint --fix`, `black`) to normalize style
+- [ ] Run the full test suite — not just the tests for the feature you changed
+- [ ] Run a security scan (`snyk`, `npm audit`, `dotnet list package --vulnerable`)
+- [ ] Confirm no compliance comments or docstrings were silently removed
+- [ ] Reset the agent session before starting the next task
 
 ---
 
-## 1. Context Window Pruning (Cost & Noise Reduction)
+## 7. Using OpenAPI / OpenSpec at Full Power
 
-* **Modular Spec Files**
-    * **Guideline:** Break your OpenAPI spec into smaller, domain-specific files (e.g., `auth.yaml`, `billing.yaml`)[cite: 1].
-    * **Γιατί:** Ο agent φορτώνει μόνο ό,τι χρειάζεται για το συγκεκριμένο task, μειώνοντας τα tokens και τα λάθη από context overload[cite: 1].
-* **Aggressive Schema Referencing ($ref)**
-    * **Guideline:** Use `$ref` for all repetitive objects and schemas[cite: 1].
-    * **Γιατί:** Αποφεύγεις την επανάληψη κώδικα μέσα στο spec, διατηρώντας το συνολικό μέγεθος του context window μικρό[cite: 1].
-* **Path Filtering**
-    * **Guideline:** When starting a task, point the agent only to specific paths or tags within the spec[cite: 1].
-    * **Γιατί:** Μειώνεται δραστικά το "θόρυβο" (noise) και το κόστος, καθώς ο agent δεν διαβάζει άσχετα endpoints[cite: 1].
-* **Session Clearing**
-    * **Guideline:** Restart the agent session immediately after a specific integration task is merged[cite: 1].
-    * **Γιατί:** Καθαρίζει το ιστορικό και εμποδίζει την αποστολή παλιών versions του spec σε κάθε νέα εντολή, εξοικονομώντας έως 50% σε κόστος tokens[cite: 1].
+For banking APIs, the OpenAPI spec is not documentation — it is a **regulatory contract**.
 
----
+### Contract-First Development
+**Rule:** Define the API spec first, then use it to auto-generate validation schemas (Zod, Pydantic, C# records).
 
-## 2. Using OpenSpec at 110% (The Power User Layer)
+**Why it matters:** This creates a strict contract the agent cannot violate. It eliminates hallucinated data formats, which in financial systems can mean incorrect monetary values or missing regulatory fields.
 
-* **Contract-First Code Generation**
-    * **Guideline:** Use the spec to automatically generate Zod (TS) or Pydantic (Python) schemas[cite: 1].
-    * **Γιατί:** Δημιουργεί ένα "αυστηρό συμβόλαιο" που ο agent δεν μπορεί να παραβιάσει, εξαλείφοντας τα hallucinations στα data formats[cite: 1].
-* **Semantic Over-Documentation**
-    * **Guideline:** Include detailed `description` and `example` fields for every endpoint and property in the spec[cite: 1].
-    * **Γιατί:** Το AI χρησιμοποιεί αυτά τα πεδία ως "anchors" για να καταλάβει το intent χωρίς να χρειάζεται να διαβάσει όλο το source code[cite: 1].
-* **Chain-of-Thought Spec Planning**
-    * **Guideline:** Command the agent to: "Plan the implementation in a comment block based strictly on this spec before writing any logic"[cite: 1].
-    * **Γιατί:** Αναγκάζει το μοντέλο να οριστικοποιήσει τη λογική του σύμφωνα με το συμβόλαιο (spec) πριν αρχίσει να γράφει κώδικα[cite: 1].
-* **Self-Healing via Testing**
-    * **Guideline:** Ask the agent to write tests that validate API responses against the OpenAPI definition[cite: 1].
-    * **Γιατί:** Επιτρέπει στον agent να αυτο-διορθώνεται (self-heal) αν το output του ξεφεύγει από τις προδιαγραφές του συμβολαίου[cite: 1].
+### Break Specs into Domain Files
+**Rule:** Split large specs into domain-specific files (`credit-scoring.yaml`, `fraud-detection.yaml`, `kyc.yaml`).
+
+**Why it matters:** The agent loads only what it needs for the current task, keeping the context window small and focused.
+
+### Annotate Everything
+**Rule:** Fill in `description` and `example` fields for every endpoint and property.
+
+**Why it matters:** The agent uses these as anchors to understand intent without reading all the source code. For regulators, these annotations also serve as inline documentation.
+
+### Self-Healing via Contract Tests
+**Rule:** Ask the agent to write tests that validate API responses against the OpenAPI spec definition.
+
+**Why it matters:** When the agent's output drifts from the spec, the test catches it automatically — the agent can then self-correct without human intervention.
 
 ---
 
-## 3. Optimization Quick-Table
-
-| Strategy | Impact | Outcome |
-| :--- | :--- | :--- |
-| **Modular Specs** | ⬇️ Token Costs | Surgical focus on the current task[cite: 1]. |
-| **Example Values** | ⬆️ Logic Accuracy | AI understands correct data shapes instantly[cite: 1]. |
-| **Mock Sandboxes** | ⬆️ Verification Speed | Verifies code against the spec without network blockers[cite: 1]. |
-| **Strict Schema Ref** | ⬇️ Hallucinations | Forces the agent to follow established data patterns[cite: 1]. |
+> **Banking Reminder:** Every AI-assisted system deployed at the bank must be explainable, auditable, and compliant with EU AI Act and EBA Guidelines. "The AI generated it" is never an acceptable answer to a regulator. Your standards, tests, and documentation are your evidence.

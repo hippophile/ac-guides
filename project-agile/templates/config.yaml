@@ -1,0 +1,208 @@
+version: "1.0"
+
+project:
+  name: "Project AGILE"
+  version: "0.1.0"
+  environment: "development"   # development | staging | production
+
+# ─────────────────────────────────────────────────────────────────────────────
+# FREE API PROVIDERS
+#
+# All three providers below use the OpenAI-compatible API format.
+# In C#, use a single HttpClient/OpenAIClient — just change base URL + key.
+#
+# Provider       | Free Tier                        | Get Key At
+# ─────────────────────────────────────────────────────────────────────────────
+# GitHub Models  | Included with GitHub Copilot Pro  | github.com/marketplace/models
+# Gemini         | 1500 req/day (Flash), 50 (Pro)    | aistudio.google.com/apikey
+# NVIDIA NIM     | 1000 free credits on signup       | build.nvidia.com
+# ─────────────────────────────────────────────────────────────────────────────
+
+models:
+  test_models:
+
+    # ── GitHub Models (free with GitHub Copilot Pro) ─────────────────────────
+    - name: "gpt-4o-github"
+      display_name: "GPT-4o (GitHub Models)"
+      provider: "github_models"
+      model_id: "gpt-4o"
+      api_key_env: "GITHUB_TOKEN"
+      endpoint: "https://models.inference.ai.azure.com"
+      max_tokens: 1000
+      temperature: 0
+      pricing:
+        input_per_1m_tokens: 0       # Free via Copilot Pro
+        output_per_1m_tokens: 0
+
+    - name: "gpt-4o-mini-github"
+      display_name: "GPT-4o Mini (GitHub Models)"
+      provider: "github_models"
+      model_id: "gpt-4o-mini"
+      api_key_env: "GITHUB_TOKEN"
+      endpoint: "https://models.inference.ai.azure.com"
+      max_tokens: 1000
+      temperature: 0
+      pricing:
+        input_per_1m_tokens: 0
+        output_per_1m_tokens: 0
+
+    - name: "llama-3.1-70b-github"
+      display_name: "Llama 3.1 70B (GitHub Models)"
+      provider: "github_models"
+      model_id: "meta-llama-3.1-70b-instruct"
+      api_key_env: "GITHUB_TOKEN"
+      endpoint: "https://models.inference.ai.azure.com"
+      max_tokens: 1000
+      temperature: 0
+      pricing:
+        input_per_1m_tokens: 0
+        output_per_1m_tokens: 0
+
+    - name: "mistral-large-github"
+      display_name: "Mistral Large (GitHub Models)"
+      provider: "github_models"
+      model_id: "mistral-large"
+      api_key_env: "GITHUB_TOKEN"
+      endpoint: "https://models.inference.ai.azure.com"
+      max_tokens: 1000
+      temperature: 0
+      pricing:
+        input_per_1m_tokens: 0
+        output_per_1m_tokens: 0
+
+    # ── Gemini (free tier via Google AI Studio) ──────────────────────────────
+    - name: "gemini-1.5-flash"
+      display_name: "Gemini 1.5 Flash (free)"
+      provider: "gemini"
+      model_id: "gemini-1.5-flash"
+      api_key_env: "GEMINI_API_KEY"
+      endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      max_tokens: 1000
+      temperature: 0
+      rate_limit:
+        requests_per_day: 1500
+        requests_per_minute: 15
+      pricing:
+        input_per_1m_tokens: 0
+        output_per_1m_tokens: 0
+
+    - name: "gemini-1.5-pro"
+      display_name: "Gemini 1.5 Pro (free - 50 req/day)"
+      provider: "gemini"
+      model_id: "gemini-1.5-pro"
+      api_key_env: "GEMINI_API_KEY"
+      endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/"
+      max_tokens: 1000
+      temperature: 0
+      rate_limit:
+        requests_per_day: 50
+        requests_per_minute: 2
+      pricing:
+        input_per_1m_tokens: 0
+        output_per_1m_tokens: 0
+
+    # ── NVIDIA API Catalog (free credits on signup) ───────────────────────────
+    - name: "llama-3.1-70b-nvidia"
+      display_name: "Llama 3.1 70B (NVIDIA NIM)"
+      provider: "nvidia"
+      model_id: "meta/llama-3.1-70b-instruct"
+      api_key_env: "NVIDIA_API_KEY"
+      endpoint: "https://integrate.api.nvidia.com/v1"
+      max_tokens: 1000
+      temperature: 0
+      pricing:
+        input_per_1m_tokens: 0.35    # After free credits
+        output_per_1m_tokens: 0.40
+
+    - name: "mistral-7b-nvidia"
+      display_name: "Mistral 7B (NVIDIA NIM)"
+      provider: "nvidia"
+      model_id: "mistralai/mistral-7b-instruct-v0.3"
+      api_key_env: "NVIDIA_API_KEY"
+      endpoint: "https://integrate.api.nvidia.com/v1"
+      max_tokens: 1000
+      temperature: 0
+      pricing:
+        input_per_1m_tokens: 0.15
+        output_per_1m_tokens: 0.15
+
+    - name: "mixtral-8x22b-nvidia"
+      display_name: "Mixtral 8x22B (NVIDIA NIM)"
+      provider: "nvidia"
+      model_id: "mistralai/mixtral-8x22b-instruct-v0.1"
+      api_key_env: "NVIDIA_API_KEY"
+      endpoint: "https://integrate.api.nvidia.com/v1"
+      max_tokens: 1000
+      temperature: 0
+      pricing:
+        input_per_1m_tokens: 0.40
+        output_per_1m_tokens: 0.40
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JUDGE MODEL
+# Must be a DIFFERENT provider/model from the ones under test.
+# Using Gemini Flash as judge when testing GitHub/NVIDIA models = no conflict.
+# ─────────────────────────────────────────────────────────────────────────────
+judge:
+  name: "gemini-1.5-flash-judge"
+  display_name: "Gemini 1.5 Flash (judge)"
+  provider: "gemini"
+  model_id: "gemini-1.5-flash"
+  api_key_env: "GEMINI_API_KEY"
+  endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  temperature: 0
+  note: >
+    Using Gemini as judge when testing GitHub Models and NVIDIA models avoids
+    self-evaluation bias. If you are also testing Gemini, switch judge to
+    a GitHub Models endpoint (e.g., gpt-4o or mistral-large).
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EVALUATION THRESHOLDS
+# ─────────────────────────────────────────────────────────────────────────────
+thresholds:
+  faithfulness: 0.85
+  groundedness: 0.80
+  answer_relevancy: 0.80
+  context_precision: 0.75
+  context_recall: 0.75
+  bias_consistency: 0.95
+  hard_floor_offset: 0.15
+  latency:
+    ttft_ms: 2000
+    total_ms: 10000
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RAG CONFIGURATION
+# ─────────────────────────────────────────────────────────────────────────────
+rag:
+  enabled: false             # Set to false for PoC — uses local documents only
+  local_documents:
+    documents_dir: "./knowledge_base"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SYSTEM PROMPT (sent to all test models — must be identical for fair comparison)
+# ─────────────────────────────────────────────────────────────────────────────
+system_prompt: |
+  You are a helpful banking assistant. Answer customer questions using only
+  the information provided in the context documents.
+  If the answer is not in the provided context, say so clearly.
+  Do not invent information, rates, or policies.
+  If asked to do something inappropriate, politely decline.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OUTPUT
+# ─────────────────────────────────────────────────────────────────────────────
+output:
+  reports_dir: "./reports"
+  formats:
+    - "json"
+    - "html"
+  include_raw_responses: true
+  include_audit_log: true
+
+runner:
+  parallel_models: true
+  request_timeout_seconds: 60
+  retry_on_timeout: true
+  max_retries: 1
+  retry_delay_seconds: 5
