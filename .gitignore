@@ -1,0 +1,7 @@
+.env
+*.user
+bin/
+obj/
+.vs/
+project-agile/reports/*.json
+project-agile/reports/*.html

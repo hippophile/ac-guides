@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agile.Core", "Agile.Core\Agile.Core.csproj", "{286557C2-C78D-4919-8EE7-A8B698C7B0C9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agile.Cli", "Agile.Cli\Agile.Cli.csproj", "{4F1DA7A0-AA46-470E-AFF2-88AF048A91AF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Agile.Web", "Agile.Web\Agile.Web.csproj", "{CF763E22-86E7-4636-A8FD-B15DDB3C0AFD}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{286557C2-C78D-4919-8EE7-A8B698C7B0C9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{286557C2-C78D-4919-8EE7-A8B698C7B0C9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{286557C2-C78D-4919-8EE7-A8B698C7B0C9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{286557C2-C78D-4919-8EE7-A8B698C7B0C9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4F1DA7A0-AA46-470E-AFF2-88AF048A91AF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4F1DA7A0-AA46-470E-AFF2-88AF048A91AF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4F1DA7A0-AA46-470E-AFF2-88AF048A91AF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4F1DA7A0-AA46-470E-AFF2-88AF048A91AF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CF763E22-86E7-4636-A8FD-B15DDB3C0AFD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CF763E22-86E7-4636-A8FD-B15DDB3C0AFD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CF763E22-86E7-4636-A8FD-B15DDB3C0AFD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CF763E22-86E7-4636-A8FD-B15DDB3C0AFD}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
