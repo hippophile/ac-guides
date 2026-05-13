@@ -1,6 +1,19 @@
 using Agile.Web.Components;
 
-DotNetEnv.Env.Load();
+// Walk up the directory tree to find the .env file
+var currentDir = new System.IO.DirectoryInfo(Environment.CurrentDirectory);
+string envPath = ".env";
+while (currentDir != null)
+{
+    var potentialEnv = System.IO.Path.Combine(currentDir.FullName, ".env");
+    if (System.IO.File.Exists(potentialEnv))
+    {
+        envPath = potentialEnv;
+        break;
+    }
+    currentDir = currentDir.Parent;
+}
+DotNetEnv.Env.Load(envPath);
 
 var builder = WebApplication.CreateBuilder(args);
 

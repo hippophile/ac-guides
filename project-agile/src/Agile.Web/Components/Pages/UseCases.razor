@@ -1,0 +1,408 @@
+@page "/use-cases"
+@rendermode InteractiveServer
+@using System.IO
+@using Microsoft.AspNetCore.Components.Forms
+@using Agile.Core.Datasets
+@using YamlDotNet.Serialization
+@using YamlDotNet.Serialization.NamingConventions
+
+<PageTitle>Use Cases & Datasets | AGILE Platform</PageTitle>
+
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="fw-bold text-primary">Use Cases & Datasets</h2>
+            <p class="text-muted">Edit your golden datasets, test prompts, and evaluation ground truths directly.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold">Datasets</h6>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-primary" @onclick="CreateBlankDataset" title="Create Blank">
+                            <i class="bi bi-file-earmark-plus"></i> New
+                        </button>
+                        <label class="btn btn-sm btn-outline-secondary mb-0" title="Upload YAML">
+                            <i class="bi bi-upload"></i>
+                            <InputFile OnChange="UploadDataset" style="display:none" />
+                        </label>
+                    </div>
+                </div>
+                <div class="list-group list-group-flush">
+                    @foreach (var file in availableFiles)
+                    {
+                        var fileName = Path.GetFileName(file);
+                        <button type="button" class="list-group-item list-group-item-action @(selectedFile == file ? "active fw-bold text-primary" : "")" @onclick="() => LoadFile(file)">
+                            <i class="bi bi-filetype-yml me-2"></i> @fileName
+                        </button>
+                    }
+                    @if (!availableFiles.Any())
+                    {
+                        <div class="p-3 text-muted small">No datasets found in datasets/golden/</div>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-9">
+            <div class="card shadow-sm border-0 h-100">
+                <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                    <h6 class="mb-0 fw-bold">
+                        @if (selectedFile != null)
+                        {
+                            <div class="d-flex align-items-center">
+                                <span class="me-2">Editing:</span>
+                                <input type="text" class="form-control form-control-sm font-monospace text-primary fw-bold border-0 bg-light" style="width: 350px;" value="@Path.GetFileName(selectedFile)" @onchange="RenameDataset" title="Edit filename" />
+                            </div>
+                        }
+                        else
+                        {
+                            <span>Select a dataset</span>
+                        }
+                    </h6>
+                    <div>
+                        <button class="btn btn-sm btn-danger fw-bold me-2" @onclick="DeleteDataset" disabled="@(selectedFile == null)">
+                            <i class="bi bi-trash me-1"></i> Delete
+                        </button>
+                        <button class="btn btn-sm btn-success fw-bold" @onclick="SaveFile" disabled="@(selectedFile == null || isSaving)">
+                            @if (isSaving)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                <span>Saving...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-floppy-fill me-1"></i> <span>Save Changes</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body bg-light overflow-auto" style="height: 600px;">
+                    @if (currentDataset != null)
+                    {
+                        <div class="mb-4 bg-white p-3 rounded shadow-sm border">
+                            <h5 class="fw-bold mb-3 text-secondary border-bottom pb-2"><i class="bi bi-info-circle me-2"></i> Dataset Metadata</h5>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label fw-bold small text-muted">Version</label>
+                                    <input type="text" class="form-control" @bind="currentDataset.Version" />
+                                </div>
+                                @foreach(var kv in currentDataset.Metadata.ToList())
+                                {
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label fw-bold small text-muted">@kv.Key</label>
+                                        <input type="text" class="form-control" value="@kv.Value" @onchange="@(e => currentDataset.Metadata[kv.Key] = e.Value!)" />
+                                    </div>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-list-check me-2"></i> Test Cases (@currentDataset.TestCases.Count)</h5>
+                            <button class="btn btn-sm btn-outline-primary" @onclick="AddTestCase"><i class="bi bi-plus-circle"></i> Add Test Case</button>
+                        </div>
+                        
+                        @foreach (var tc in currentDataset.TestCases)
+                        {
+                            <div class="card mb-4 shadow-sm border-0">
+                                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom" style="cursor:pointer;" @onclick="() => ToggleExpanded(tc.Id)">
+                                    <h6 class="mb-0 fw-bold">
+                                        <i class="bi @(expandedCases.Contains(tc.Id) ? "bi-chevron-down" : "bi-chevron-right") me-2 text-muted"></i>
+                                        <span class="font-monospace text-primary me-2">@tc.Id</span>
+                                        <span class="text-dark">@tc.Category</span>
+                                    </h6>
+                                    <span class="badge bg-light text-dark border">@tc.Difficulty</span>
+                                </div>
+                                
+                                @if (expandedCases.Contains(tc.Id))
+                                {
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label class="form-label fw-bold"><i class="bi bi-chat-left-text me-1 text-primary"></i> Prompt (The User's Question)</label>
+                                            <textarea class="form-control" rows="2" @bind="tc.Prompt"></textarea>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold"><i class="bi bi-tag me-1 text-secondary"></i> Category</label>
+                                                <input type="text" class="form-control" @bind="tc.Category" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label fw-bold"><i class="bi bi-bar-chart-steps me-1 text-secondary"></i> Difficulty</label>
+                                                <input type="text" class="form-control" @bind="tc.Difficulty" />
+                                            </div>
+                                        </div>
+                                        
+                                        @if(tc.BiasVariants.Any())
+                                        {
+                                            <div class="mt-4 border-top pt-3">
+                                                <label class="form-label fw-bold text-danger"><i class="bi bi-shield-exclamation me-1"></i> Bias Variants</label>
+                                                @foreach(var variant in tc.BiasVariants)
+                                                {
+                                                    <div class="d-flex mb-2">
+                                                        <span class="input-group-text bg-light font-monospace small">@variant.VariantAttribute</span>
+                                                        <input type="text" class="form-control" @bind="variant.Prompt" />
+                                                    </div>
+                                                }
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                    else if (selectedFile != null)
+                    {
+                        <div class="d-flex justify-content-center align-items-center h-100">
+                            <div class="spinner-border text-primary" role="status"></div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-flex flex-column justify-content-center align-items-center text-muted" style="height: 100%;">
+                            <i class="bi bi-ui-checks-grid fs-1 mb-3"></i>
+                            <h5>No file selected</h5>
+                            <p>Select a golden dataset from the sidebar to edit its test cases visually.</p>
+                        </div>
+                    }
+                </div>
+                @if (saveMessage != null)
+                {
+                    <div class="card-footer bg-success text-white small py-2">
+                        <i class="bi bi-check-circle-fill me-1"></i> @saveMessage
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<string> availableFiles = new();
+    private string? selectedFile;
+    private YamlDataset? currentDataset;
+    private bool isSaving = false;
+    private string? saveMessage;
+    private HashSet<string> expandedCases = new();
+
+    private static readonly IDeserializer Deserializer = new DeserializerBuilder()
+        .WithNamingConvention(UnderscoredNamingConvention.Instance)
+        .IgnoreUnmatchedProperties()
+        .Build();
+
+    private static readonly ISerializer Serializer = new SerializerBuilder()
+        .WithNamingConvention(UnderscoredNamingConvention.Instance)
+        .ConfigureDefaultValuesHandling(DefaultValuesHandling.OmitEmptyCollections | DefaultValuesHandling.OmitDefaults)
+        .Build();
+
+    protected override void OnInitialized()
+    {
+        var current = new DirectoryInfo(Environment.CurrentDirectory);
+        DirectoryInfo? projectRoot = null;
+        
+        while (current != null)
+        {
+            if (Directory.Exists(Path.Combine(current.FullName, "datasets", "golden")))
+            {
+                projectRoot = current;
+                break;
+            }
+            current = current.Parent;
+        }
+
+        if (projectRoot != null)
+        {
+            var datasetsDir = Path.Combine(projectRoot.FullName, "datasets", "golden");
+            availableFiles = Directory.GetFiles(datasetsDir, "*.yaml").ToList();
+            if (availableFiles.Any())
+            {
+                LoadFile(availableFiles.First());
+            }
+        }
+    }
+
+    private void LoadFile(string path)
+    {
+        selectedFile = path;
+        saveMessage = null;
+        expandedCases.Clear();
+        try
+        {
+            var yaml = File.ReadAllText(path);
+            currentDataset = Deserializer.Deserialize<YamlDataset>(yaml);
+            
+            // Expand the first case by default
+            if (currentDataset?.TestCases.Any() == true)
+            {
+                expandedCases.Add(currentDataset.TestCases.First().Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"Error parsing YAML: {ex.Message}";
+            currentDataset = null;
+        }
+    }
+
+    private void ToggleExpanded(string id)
+    {
+        if (expandedCases.Contains(id))
+            expandedCases.Remove(id);
+        else
+            expandedCases.Add(id);
+    }
+
+    private void AddTestCase()
+    {
+        if (currentDataset == null) return;
+        var newId = $"TC{(currentDataset.TestCases.Count + 1).ToString("D3")}";
+        var newTc = new YamlTestCase
+        {
+            Id = newId,
+            Category = "new-category",
+            Difficulty = "easy",
+            Prompt = "Enter the prompt here...",
+            GroundTruth = "" // User doesn't need to specify it immediately
+        };
+        currentDataset.TestCases.Add(newTc);
+        expandedCases.Add(newId);
+    }
+
+    private void DeleteDataset()
+    {
+        if (selectedFile == null) return;
+        if (File.Exists(selectedFile))
+        {
+            File.Delete(selectedFile);
+            availableFiles.Remove(selectedFile);
+            selectedFile = null;
+            currentDataset = null;
+            if (availableFiles.Any())
+            {
+                LoadFile(availableFiles.First());
+            }
+        }
+    }
+
+    private void RenameDataset(ChangeEventArgs e)
+    {
+        if (selectedFile == null) return;
+        var newName = e.Value?.ToString();
+        if (string.IsNullOrWhiteSpace(newName)) return;
+        
+        if (!newName.EndsWith(".yaml")) newName += ".yaml";
+        
+        var dir = Path.GetDirectoryName(selectedFile);
+        if (dir == null) return;
+        
+        var newPath = Path.Combine(dir, newName);
+        if (newPath == selectedFile) return;
+        
+        if (File.Exists(newPath))
+        {
+            saveMessage = "A dataset with that name already exists.";
+            return;
+        }
+        
+        try
+        {
+            File.Move(selectedFile, newPath);
+            var index = availableFiles.IndexOf(selectedFile);
+            if (index >= 0) availableFiles[index] = newPath;
+            
+            selectedFile = newPath;
+            saveMessage = "Dataset renamed to " + newName;
+        }
+        catch (Exception ex)
+        {
+            saveMessage = "Error renaming: " + ex.Message;
+        }
+    }
+
+    private void CreateBlankDataset()
+    {
+        var currentDir = new DirectoryInfo(Environment.CurrentDirectory);
+        DirectoryInfo? projectRoot = null;
+        while (currentDir != null)
+        {
+            if (Directory.Exists(Path.Combine(currentDir.FullName, "datasets", "golden")))
+            {
+                projectRoot = currentDir;
+                break;
+            }
+            currentDir = currentDir.Parent;
+        }
+
+        var root = projectRoot?.FullName ?? Environment.CurrentDirectory;
+        var datasetsDir = Path.Combine(root, "datasets", "golden");
+        
+        var newFileName = Path.Combine(datasetsDir, $"new_dataset_{DateTime.Now.Ticks}.yaml");
+        var blank = new YamlDataset 
+        { 
+            Version = "1.0",
+            Metadata = new Dictionary<string, object> { { "description", "New Dataset" } }
+        };
+        var yaml = Serializer.Serialize(blank);
+        File.WriteAllText(newFileName, yaml);
+        
+        availableFiles.Add(newFileName);
+        LoadFile(newFileName);
+    }
+
+    private async Task UploadDataset(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (file == null) return;
+
+        var currentDir = new DirectoryInfo(Environment.CurrentDirectory);
+        DirectoryInfo? projectRoot = null;
+        while (currentDir != null)
+        {
+            if (Directory.Exists(Path.Combine(currentDir.FullName, "datasets", "golden")))
+            {
+                projectRoot = currentDir;
+                break;
+            }
+            currentDir = currentDir.Parent;
+        }
+
+        var root = projectRoot?.FullName ?? Environment.CurrentDirectory;
+        var datasetsDir = Path.Combine(root, "datasets", "golden");
+        
+        var targetPath = Path.Combine(datasetsDir, file.Name);
+        
+        using var stream = file.OpenReadStream(maxAllowedSize: 1048576); // 1MB max
+        using var fs = File.Create(targetPath);
+        await stream.CopyToAsync(fs);
+        
+        if (!availableFiles.Contains(targetPath))
+        {
+            availableFiles.Add(targetPath);
+        }
+        LoadFile(targetPath);
+    }
+
+    private async Task SaveFile()
+    {
+        if (selectedFile == null || currentDataset == null) return;
+        
+        isSaving = true;
+        saveMessage = null;
+        
+        try
+        {
+            var yamlOut = Serializer.Serialize(currentDataset);
+            await File.WriteAllTextAsync(selectedFile, yamlOut);
+            saveMessage = "Dataset saved successfully at " + DateTime.Now.ToString("HH:mm:ss");
+        }
+        catch (Exception ex)
+        {
+            saveMessage = $"Error saving: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

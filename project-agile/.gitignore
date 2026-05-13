@@ -1,0 +1,13 @@
+# .gitignore for AGILE Project
+.env
+agile-settings.json
+platform_settings.json
+*.user
+bin/
+obj/
+.vs/
+.vscode/
+*.swp
+*.bak
+scratch/
+reports/

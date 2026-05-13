@@ -65,13 +65,14 @@ public class YamlDatasetLoader
     }
 }
 
-internal class YamlDataset
+public class YamlDataset
 {
     public string Version { get; set; } = string.Empty;
+    public Dictionary<string, object> Metadata { get; set; } = new();
     public List<YamlTestCase> TestCases { get; set; } = new();
 }
 
-internal class YamlTestCase
+public class YamlTestCase
 {
     public string Id { get; set; } = string.Empty;
     public string Category { get; set; } = string.Empty;
@@ -84,7 +85,7 @@ internal class YamlTestCase
     public List<string> Tags { get; set; } = new();
 }
 
-internal class YamlBiasVariant
+public class YamlBiasVariant
 {
     public string Prompt { get; set; } = string.Empty;
     public string VariantAttribute { get; set; } = string.Empty;

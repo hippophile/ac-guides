@@ -1,7 +1,102 @@
-﻿@page "/"
+@page "/"
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Dashboard | AGILE Platform</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="display-5 fw-bold text-primary mb-2">AGILE Test Platform</h1>
+            <p class="lead text-muted">AI Governance, Integration, and Lifecycle Evaluation</p>
+        </div>
+    </div>
 
-Welcome to your new app.
+    <div class="row g-4 mb-5">
+        <!-- Summary Cards -->
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-primary border-4 h-100">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase fw-semibold mb-2">Active Use Cases</h6>
+                    <h2 class="display-6 mb-0">12</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-success border-4 h-100">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase fw-semibold mb-2">Tests Passed (30d)</h6>
+                    <h2 class="display-6 mb-0">1,402</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-danger border-4 h-100">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase fw-semibold mb-2">Critical Failures</h6>
+                    <h2 class="display-6 mb-0">3</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card shadow-sm border-0 border-start border-info border-4 h-100">
+                <div class="card-body">
+                    <h6 class="text-muted text-uppercase fw-semibold mb-2">Audit Readiness</h6>
+                    <h2 class="display-6 mb-0">92%</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Runs -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold">Recent Test Runs</h5>
+                    <a href="/reports" class="btn btn-sm btn-outline-primary">View All</a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-4">Run ID</th>
+                                    <th>Use Case</th>
+                                    <th>Model</th>
+                                    <th>Status</th>
+                                    <th>Date</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="ps-4 font-monospace text-muted small">c3b1d6f5</td>
+                                    <td class="fw-medium">Customer Service RAG</td>
+                                    <td><span class="badge bg-light text-dark border">gpt-4o-mini</span></td>
+                                    <td><span class="badge bg-danger">Failed</span></td>
+                                    <td class="text-muted small">Just now</td>
+                                    <td><button class="btn btn-sm btn-link text-decoration-none">Report</button></td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4 font-monospace text-muted small">a8f9b2e1</td>
+                                    <td class="fw-medium">Credit Scoring Sandbox</td>
+                                    <td><span class="badge bg-light text-dark border">xgboost-v2</span></td>
+                                    <td><span class="badge bg-success">Passed</span></td>
+                                    <td class="text-muted small">2 hours ago</td>
+                                    <td><button class="btn btn-sm btn-link text-decoration-none">Report</button></td>
+                                </tr>
+                                <tr>
+                                    <td class="ps-4 font-monospace text-muted small">f4d2c8a9</td>
+                                    <td class="fw-medium">Fraud Detection Timeline</td>
+                                    <td><span class="badge bg-light text-dark border">random-forest</span></td>
+                                    <td><span class="badge bg-success">Passed</span></td>
+                                    <td class="text-muted small">Yesterday</td>
+                                    <td><button class="btn btn-sm btn-link text-decoration-none">Report</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

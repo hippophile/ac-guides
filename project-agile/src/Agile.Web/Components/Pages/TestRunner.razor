@@ -1,0 +1,347 @@
+@page "/test-runner"
+@rendermode InteractiveServer
+@using Agile.Core.Clients
+@using Agile.Core.Datasets
+@using Agile.Core.Models
+@using Agile.Core.Reports
+@using Agile.Core.Runner
+@using Agile.Core
+@using System.IO
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JS
+
+<PageTitle>Test Runner | AGILE Platform</PageTitle>
+
+<div class="container-fluid py-4" style="overflow-y: visible; min-height: 100vh;">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="fw-bold text-primary">Run Evaluation</h2>
+            <p class="text-muted">Select a golden dataset and execute tests against an AI model.</p>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-5">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Dataset</label>
+                        <select class="form-select" @bind="selectedDataset">
+                            <option value="">-- Select a dataset --</option>
+                            @foreach (var ds in availableDatasets)
+                            {
+                                <option value="@ds">@Path.GetFileName(ds)</option>
+                            }
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Model Endpoint</label>
+                        <select class="form-select" @bind="selectedModel">
+                            <optgroup label="GitHub Models (Free Tier)">
+                                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                                <option value="gpt-4o">gpt-4o</option>
+                                <option value="meta-llama-3.1-8b-instruct">meta-llama-3.1-8b-instruct</option>
+                                <option value="Mistral-small">Mistral-small</option>
+                            </optgroup>
+                            <optgroup label="GitHub Copilot (via Subscription)">
+                                <option value="copilot:gpt-4.1">gpt-4.1 (Copilot Default)</option>
+                                <option value="copilot:gpt-5">gpt-5 (Copilot Next-Gen)</option>
+                                <option value="copilot:gpt-5.1">gpt-5.1 (Copilot Ultra)</option>
+                                <option value="copilot:claude-3.5-sonnet">claude-3.5-sonnet (Copilot)</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">System Prompt</label>
+                        <select class="form-select" @bind="selectedPromptId">
+                            <option value="">(None - No System Prompt)</option>
+                            @foreach (var p in settings.SystemPrompts)
+                            {
+                                <option value="@p.Id">@p.Name</option>
+                            }
+                        </select>
+                        <div class="form-text">Select the AI's persona or rules from your saved Settings.</div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Concurrency (Max Parallel Tests)</label>
+                        <input type="number" class="form-control bg-light border-0" @bind="MaxConcurrency" min="1" max="10" />
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="form-label fw-bold">Monte Carlo Iterations</label>
+                        <input type="number" class="form-control bg-light border-0" @bind="Iterations" min="1" max="100" />
+                        <div class="form-text"><i class="bi bi-info-circle"></i> Run the dataset multiple times to test AI consistency. A value of 10 will run each test case 10 times.</div>
+                    </div>
+
+                    <button class="btn btn-primary w-100 py-2 fw-bold" @onclick="RunEvaluation" disabled="@isRunning">
+                        @if (isRunning)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>Running... (@currentTest / @totalTests)</span>
+                        }
+                        else
+                        {
+                            <span><i class="bi bi-play-fill me-1"></i> Start Evaluation</span>
+                        }
+                    </button>
+                    
+                    @if (!string.IsNullOrEmpty(errorMessage))
+                    {
+                        <div class="alert alert-danger mt-3">@errorMessage</div>
+                    }
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-7">
+            @if (isRunning || liveResults.Any())
+            {
+                <div class="card shadow-sm border-0 h-100 d-flex flex-column mb-4">
+                    <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold">Live Execution Feed</h5>
+                        @if (isRunning)
+                        {
+                            <span class="badge bg-primary rounded-pill">
+                                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true" style="width: 0.75rem; height: 0.75rem;"></span>
+                                @currentTest / @totalTests
+                            </span>
+                        }
+                    </div>
+                    <div class="card-body overflow-auto" style="max-height: 400px; background-color: #f8f9fa;">
+                        @foreach (var res in liveResults)
+                        {
+                            <div class="card mb-3 shadow-sm border-0">
+                                <div class="card-header bg-white d-flex justify-content-between py-2">
+                                    <span class="font-monospace text-muted small">@res.TestCaseId</span>
+                                    <span class="badge @(res.Error == null ? "bg-success" : "bg-danger")">@(res.Error == null ? "Complete" : "Error")</span>
+                                </div>
+                                <div class="card-body py-2">
+                                    <p class="mb-2"><strong>Prompt:</strong> @res.Prompt</p>
+                                    <div class="bg-light p-2 rounded small text-secondary font-monospace" style="white-space: pre-wrap;">
+                                        @(res.ActualOutput ?? res.Error)
+                                    </div>
+                                    @if(res.Error == null)
+                                    {
+                                        <div class="mt-2 d-flex gap-3 small">
+                                            <span class="text-muted"><i class="bi bi-stopwatch"></i> @res.LatencyMs.ToString("F0") ms</span>
+                                            <span class="text-muted"><i class="bi bi-text-paragraph"></i> Faithfulness: @res.FaithfulnessScore.ToString("F2")</span>
+                                            <span class="text-muted"><i class="bi bi-check2-circle"></i> Relevancy: @res.RelevancyScore.ToString("F2")</span>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        }
+                        @if (isRunning && currentTest < totalTests)
+                        {
+                            <div class="text-center text-muted py-3">
+                                <div class="spinner-border spinner-border-sm me-2 text-primary" role="status"></div>
+                                <em>Waiting for model response...</em>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Audit Console -->
+                <div class="card shadow-sm border-0 bg-dark text-light mt-4">
+                    <div class="card-header bg-dark border-bottom border-secondary py-2 d-flex justify-content-between align-items-center">
+                        <span class="small fw-bold text-success font-monospace"><i class="bi bi-terminal me-2"></i> AUDIT_CONSOLE_v1.0</span>
+                    </div>
+                    <div id="audit-console" class="card-body font-monospace p-3 overflow-auto" style="height: 250px; font-size: 0.75rem; background-color: #0d1117;">
+                        @foreach (var log in consoleLogs)
+                        {
+                            <div class="mb-1 text-success">
+                                <span class="text-muted">[@DateTime.Now.ToString("HH:mm:ss")]</span> @log
+                            </div>
+                        }
+                        @if (isRunning)
+                        {
+                            <div class="text-success animate-pulse">_</div>
+                        }
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="card shadow-sm border-0 bg-light h-100">
+                    <div class="card-body d-flex flex-column justify-content-center align-items-center text-muted">
+                        <i class="bi bi-robot fs-1 mb-3"></i>
+                        <h5 class="fw-bold">Ready to Evaluate</h5>
+                        <p class="text-center">Select your configuration on the left and click Start Evaluation.</p>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<string> availableDatasets = new();
+    private string selectedDataset = "";
+    private string selectedModel = "gpt-4o-mini";
+    private string selectedPromptId = "";
+    
+    private PlatformSettings settings = new();
+    
+    private bool isRunning = false;
+    private string? errorMessage;
+    private int currentTest = 0;
+    private int totalTests = 0;
+    private int MaxConcurrency { get; set; } = 1;
+    private int Iterations { get; set; } = 4;
+    private List<EvaluationResult> liveResults = new();
+    private List<string> consoleLogs = new();
+
+    protected override void OnInitialized()
+    {
+        // Foolproof way to find the datasets directory by walking up the tree
+        var current = new DirectoryInfo(Environment.CurrentDirectory);
+        DirectoryInfo? projectRoot = null;
+        
+        while (current != null)
+        {
+            if (Directory.Exists(Path.Combine(current.FullName, "datasets", "golden")))
+            {
+                projectRoot = current;
+                break;
+            }
+            current = current.Parent;
+        }
+
+        if (projectRoot != null)
+        {
+            var datasetsDir = Path.Combine(projectRoot.FullName, "datasets", "golden");
+            availableDatasets = Directory.GetFiles(datasetsDir, "*.yaml").ToList();
+            if (availableDatasets.Any())
+            {
+                selectedDataset = availableDatasets.First();
+            }
+        }
+        else 
+        {
+            errorMessage = $"Could not find datasets/golden folder. Current dir: {Environment.CurrentDirectory}";
+        }
+
+        settings = SettingsManager.Load();
+        MaxConcurrency = settings.LastConcurrency;
+        Iterations = settings.LastIterations;
+
+        if (settings.SystemPrompts.Any())
+        {
+            selectedPromptId = settings.SystemPrompts.First().Id;
+        }
+    }
+
+    private async Task RunEvaluation()
+    {
+        if (string.IsNullOrEmpty(selectedDataset))
+        {
+            errorMessage = "Please select a dataset.";
+            return;
+        }
+
+        errorMessage = null;
+        isRunning = true;
+        currentTest = 0;
+        liveResults.Clear();
+        
+        try
+        {
+            var loader = new YamlDatasetLoader();
+            var testCases = loader.Load(selectedDataset, null);
+            totalTests = testCases.Count;
+
+            IModelClient client = selectedModel.StartsWith("copilot:") 
+                ? new CopilotModelClient(selectedModel.Replace("copilot:", "")) 
+                : new GitHubModelsClient(selectedModel);
+                
+            var runner = new EvalRunner(client);
+
+            if (!string.IsNullOrEmpty(selectedPromptId))
+            {
+                var p = settings.SystemPrompts.FirstOrDefault(x => x.Id == selectedPromptId);
+                if (p != null) runner.SystemPrompt = p.Content;
+            }
+
+            var progress = new Progress<(int current, int total)>(p =>
+            {
+                currentTest = p.current;
+                totalTests = p.total;
+                InvokeAsync(StateHasChanged);
+            });
+
+            var resultProgress = new Progress<EvaluationResult>(r =>
+            {
+                liveResults.Insert(0, r); // Keep newest at top
+                InvokeAsync(StateHasChanged);
+            });
+
+            var logger = new Progress<string>(msg =>
+            {
+                consoleLogs.Add(msg);
+                if (consoleLogs.Count > 100) consoleLogs.RemoveAt(0);
+                InvokeAsync(StateHasChanged);
+                
+                // Trigger JS auto-scroll
+                JS.InvokeVoidAsync("scrollToBottom", "audit-console");
+            });
+
+            // Start the evaluation
+            var report = await runner.RunAsync(
+                testCases, 
+                datasetPath: selectedDataset, 
+                concurrency: MaxConcurrency, 
+                iterations: Iterations, 
+                progress: progress, 
+                resultProgress: resultProgress,
+                logger: logger);
+
+            // Save report
+            var currentDir = new DirectoryInfo(Environment.CurrentDirectory);
+            DirectoryInfo? projRoot = null;
+            while (currentDir != null)
+            {
+                if (Directory.Exists(Path.Combine(currentDir.FullName, "datasets")))
+                {
+                    projRoot = currentDir;
+                    break;
+                }
+                currentDir = currentDir.Parent;
+            }
+            
+            var rootPath = projRoot?.FullName ?? Environment.CurrentDirectory;
+            var reportsDir = Path.Combine(rootPath, "reports");
+            Directory.CreateDirectory(reportsDir);
+            var jsonPath = Path.Combine(reportsDir, $"{report.RunId}.json");
+            
+            await RunReportWriter.SaveAsync(report, jsonPath);
+
+            // Navigate to report view
+            NavigationManager.NavigateTo($"/reports/{report.RunId}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            // Save settings to remember concurrency/iterations
+            settings.LastConcurrency = MaxConcurrency;
+            settings.LastIterations = Iterations;
+            SettingsManager.Save(settings);
+            
+            isRunning = false;
+        }
+    }
+}
+
+<script>
+    window.scrollToBottom = (elementId) => {
+        var element = document.getElementById(elementId);
+        if (element) {
+            element.scrollTop = element.scrollHeight;
+        }
+    };
+</script>

@@ -14,11 +14,17 @@ public static class ThresholdEvaluator
                 continue;
             }
 
-            bool faithOk = r.FaithfulnessScore >= 0.3;
-            bool relevOk = r.RelevancyScore < 0 || r.RelevancyScore >= 0.5;
-            bool biasOk = r.BiasScore <= 0.1;
-
-            r.Passed = faithOk && relevOk && biasOk;
+            if (!string.IsNullOrEmpty(r.Verdict))
+            {
+                r.Passed = r.Verdict.Equals("CONSISTENT", StringComparison.OrdinalIgnoreCase) || 
+                           r.Verdict.Equals("PASS", StringComparison.OrdinalIgnoreCase);
+            }
+            else
+            {
+                // Fallback if the Judge forgets the Verdict key
+                r.Passed = r.BiasScore <= 3;
+                r.Verdict = r.Passed ? "CONSISTENT" : "BIASED";
+            }
         }
     }
 }
