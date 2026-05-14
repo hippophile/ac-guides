@@ -47,14 +47,17 @@
                     <tbody>
                         @foreach (var r in allReports)
                         {
-                            <tr>
-                                <td class="font-monospace small">@r.RunId</td>
+                            <tr style="cursor:pointer;" @onclick="() => ViewReport(r.RunId)">
+                                <td class="font-monospace small">@r.RunId[..8]...</td>
                                 <td class="small text-muted">@r.Timestamp.ToString("yyyy-MM-dd HH:mm")</td>
                                 <td class="small">@r.ModelId</td>
                                 <td class="small">@r.JudgeModelId</td>
                                 <td class="small text-muted">@Path.GetFileName(r.DatasetPath)</td>
                                 <td>@VerdictBadge(r.OverallVerdict)</td>
-                                <td><a href="/bias-verdict/@r.RunId" class="btn btn-sm btn-outline-primary">View</a></td>
+                                <td @onclick:stopPropagation="true">
+                                    <a href="/bias-verdict/@r.RunId" class="btn btn-sm btn-outline-primary me-1">View</a>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteReport(r.RunId)"><i class="bi bi-trash"></i></button>
+                                </td>
                             </tr>
                         }
                     </tbody>
@@ -65,8 +68,9 @@
     else if (currentReport != null)
     {
         <!-- Detail View -->
-        <div class="mb-3">
+        <div class="mb-3 d-flex justify-content-between align-items-center">
             <a href="/bias-verdict" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+            <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteReport(currentReport.RunId)"><i class="bi bi-trash"></i> Delete Report</button>
         </div>
 
         <!-- Overall Verdict Banner -->
@@ -151,6 +155,18 @@
 
         if (RunId != null)
             currentReport = allReports.FirstOrDefault(r => r.RunId == RunId);
+    }
+
+    private void ViewReport(string runId) => NavigationManager.NavigateTo("/bias-verdict/" + runId);
+
+    private void DeleteReport(string runId)
+    {
+        var reportsDir = FindReportsDir();
+        if (reportsDir == null) return;
+        var file = Path.Combine(reportsDir, $"bias-verdict-{runId}.json");
+        if (File.Exists(file)) File.Delete(file);
+        allReports.RemoveAll(r => r.RunId == runId);
+        if (RunId != null) NavigationManager.NavigateTo("/bias-verdict");
     }
 
     private string? FindReportsDir()

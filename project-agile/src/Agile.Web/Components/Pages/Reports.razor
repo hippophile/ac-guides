@@ -590,7 +590,7 @@
                         }
                         catch { /* skip invalid */ }
                     }
-                    else
+                    else if (!fileName.StartsWith("bias-verdict-"))
                     {
                         try
                         {
