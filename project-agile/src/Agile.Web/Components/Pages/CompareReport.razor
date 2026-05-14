@@ -1,0 +1,288 @@
+@page "/reports/compare/{ComparisonId}"
+@rendermode InteractiveServer
+@using Agile.Core.Models
+@using System.IO
+@using Newtonsoft.Json
+@inject NavigationManager NavigationManager
+
+<PageTitle>Comparison Report | AGILE Platform</PageTitle>
+
+<div class="container-fluid py-4">
+    <div class="row mb-4">
+        <div class="col-12 d-flex justify-content-between align-items-center">
+            <div>
+                <h2 class="fw-bold text-primary mb-0">Comparison Report</h2>
+                <p class="text-muted mb-0">Side-by-side bias analysis across models.</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="/reports" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back to Reports</a>
+                <button class="btn btn-outline-danger btn-sm" @onclick="DeleteReport" title="Delete Report"><i class="bi bi-trash"></i></button>
+            </div>
+        </div>
+    </div>
+
+    @if (errorMessage != null)
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+    else if (report != null)
+    {
+        <!-- Winner Banner -->
+        <div class="alert alert-success border-0 shadow-sm mb-4 d-flex align-items-center gap-3">
+            <i class="bi bi-trophy-fill fs-3 text-success"></i>
+            <div>
+                <h5 class="mb-0 fw-bold">Least Biased Model: @report.Winner</h5>
+                <span class="text-muted">Avg Bias @report.WinnerBias.ToString("F1")</span>
+            </div>
+        </div>
+
+        <!-- Side-by-side Bias Table -->
+        <div class="card shadow-sm border-0 mb-4">
+            <div class="card-header bg-white py-3 border-bottom">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-table me-2 text-primary"></i> Per-Applicant Bias Scores</h5>
+                <div class="text-muted small mt-1">Click a row to see per-model outputs and verdicts.</div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th class="ps-4">Applicant ID</th>
+                                @foreach (var r in report.Reports)
+                                {
+                                    <th>@r.ModelId</th>
+                                }
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var applicantId in applicantIds)
+                            {
+                                var isExpanded = expandedRows.Contains(applicantId);
+                                <tr @onclick="() => ToggleRow(applicantId)" style="cursor: pointer;"
+                                    class="@(isExpanded ? "table-active" : "")">
+                                    <td class="ps-4 fw-bold font-monospace">
+                                        <i class="bi @(isExpanded ? "bi-chevron-down" : "bi-chevron-right") me-2 text-primary"></i>
+                                        @applicantId
+                                    </td>
+                                    @foreach (var r in report.Reports)
+                                    {
+                                        var bias = GetAvgBias(r, applicantId);
+                                        <td>
+                                            @if (bias.HasValue)
+                                            {
+                                                <span class="badge @BiasClass(bias.Value) border px-2">@bias.Value.ToString("F1")</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-muted">-</span>
+                                            }
+                                        </td>
+                                    }
+                                </tr>
+                                @if (isExpanded)
+                                {
+                                    <tr class="bg-light">
+                                        <td colspan="@(report.Reports.Count + 1)" class="p-0">
+                                            <div class="p-3">
+                                                <div class="row g-3">
+                                                    @foreach (var r in report.Reports)
+                                                    {
+                                                        var runs = r.Results
+                                                            .Where(res => res.TestCaseId.Split("_Run")[0] == applicantId)
+                                                            .ToList();
+                                                        var firstRun = runs.FirstOrDefault();
+                                                        var avgBias = runs.Any() ? runs.Average(x => x.BiasScore) : 0.0;
+                                                        var passed = runs.Count(x => x.Passed);
+                                                        var isWinner = r.ModelId == report.Winner;
+
+                                                        <div class="col-md-@(12 / report.Reports.Count)">
+                                                            <div class="card border-0 shadow-sm h-100 @(isWinner ? "border-start border-success border-3" : "")">
+                                                                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center border-bottom-0">
+                                                                    <span class="fw-bold small text-uppercase text-muted">@r.ModelId</span>
+                                                                    <div class="d-flex gap-1 align-items-center">
+                                                                        <span class="badge @BiasClass(avgBias) border">Bias: @avgBias.ToString("F1")</span>
+                                                                        <span class="badge @(passed == runs.Count ? "bg-success" : passed > 0 ? "bg-warning text-dark" : "bg-danger")">
+                                                                            @passed/@runs.Count Pass
+                                                                        </span>
+                                                                        @if (isWinner) { <span class="badge bg-success"><i class="bi bi-trophy-fill"></i></span> }
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card-body py-2">
+                                                                    @if (firstRun != null)
+                                                                    {
+                                                                        <div class="mb-2">
+                                                                            <div class="text-muted small fw-bold text-uppercase mb-1">Prompt</div>
+                                                                            <div class="bg-light p-2 rounded small font-monospace" style="white-space: pre-wrap; max-height: 100px; overflow-y: auto;">@firstRun.Prompt</div>
+                                                                        </div>
+
+                                                                        <div class="mb-2">
+                                                                            <div class="text-muted small fw-bold text-uppercase mb-1">Sample Output (Run 1)</div>
+                                                                            <div class="bg-white border p-2 rounded small font-monospace" style="white-space: pre-wrap; max-height: 120px; overflow-y: auto;">
+                                                                                @(firstRun.Error != null ? "ERROR: " + firstRun.Error : firstRun.ActualOutput)
+                                                                            </div>
+                                                                        </div>
+
+                                                                        @if (!string.IsNullOrWhiteSpace(firstRun.JudgeReasoning))
+                                                                        {
+                                                                            <div>
+                                                                                <div class="text-muted small fw-bold text-uppercase mb-1">Judge Reasoning</div>
+                                                                                <div class="bg-light p-2 rounded small text-secondary" style="white-space: pre-wrap; max-height: 100px; overflow-y: auto;">@firstRun.JudgeReasoning</div>
+                                                                            </div>
+                                                                        }
+
+                                                                        <!-- Run-level decisions summary -->
+                                                                        @if (runs.Count > 1)
+                                                                        {
+                                                                            var decisions = runs
+                                                                                .GroupBy(x => x.Decision ?? "Unknown")
+                                                                                .Select(g => new { Decision = g.Key, Count = g.Count() })
+                                                                                .OrderByDescending(x => x.Count)
+                                                                                .ToList();
+                                                                            <div class="mt-2">
+                                                                                <div class="text-muted small fw-bold text-uppercase mb-1">Decision Distribution (@runs.Count runs)</div>
+                                                                                <div class="d-flex flex-wrap gap-1">
+                                                                                    @foreach (var d in decisions)
+                                                                                    {
+                                                                                        <span class="badge @(d.Decision == "Approved" ? "bg-success" : d.Decision == "Unknown" ? "bg-secondary" : "bg-danger")">
+                                                                                            @d.Decision: @d.Count
+                                                                                        </span>
+                                                                                    }
+                                                                                </div>
+                                                                            </div>
+                                                                        }
+                                                                    }
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Per-model summary cards -->
+        <div class="row">
+            @foreach (var r in report.Reports)
+            {
+                <div class="col-md-3 mb-3">
+                    <div class="card shadow-sm border-0 border-start border-4 @(r.ModelId == report.Winner ? "border-success" : "border-secondary") h-100">
+                        <div class="card-body">
+                            <h6 class="text-muted small text-uppercase fw-bold">@r.ModelId</h6>
+                            <h4 class="fw-bold">@r.AverageBiasScore.ToString("F1")</h4>
+                            <div class="text-muted small">Avg Bias Score</div>
+                            @if (r.ModelId == report.Winner)
+                            {
+                                <span class="badge bg-success mt-2">Winner</span>
+                            }
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border text-primary" role="status"></div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string? ComparisonId { get; set; }
+
+    private ComparisonReport? report;
+    private string? errorMessage;
+    private List<string> applicantIds = new();
+    private HashSet<string> expandedRows = new();
+
+    private void DeleteReport()
+    {
+        var current = new DirectoryInfo(Environment.CurrentDirectory);
+        DirectoryInfo? projectRoot = null;
+        while (current != null)
+        {
+            if (Directory.Exists(Path.Combine(current.FullName, "datasets"))) { projectRoot = current; break; }
+            current = current.Parent;
+        }
+        var rootPath = projectRoot?.FullName ?? Environment.CurrentDirectory;
+        var filePath = Path.Combine(rootPath, "reports", $"compare_{ComparisonId}.json");
+        if (File.Exists(filePath)) File.Delete(filePath);
+        NavigationManager.NavigateTo("/reports");
+    }
+
+    private void ToggleRow(string applicantId)
+    {
+        if (expandedRows.Contains(applicantId)) expandedRows.Remove(applicantId);
+        else expandedRows.Add(applicantId);
+    }
+
+    protected override void OnParametersSet()
+    {
+        report = null;
+        errorMessage = null;
+        applicantIds.Clear();
+        expandedRows.Clear();
+
+        var current = new DirectoryInfo(Environment.CurrentDirectory);
+        DirectoryInfo? projectRoot = null;
+        while (current != null)
+        {
+            if (Directory.Exists(Path.Combine(current.FullName, "datasets")))
+            {
+                projectRoot = current;
+                break;
+            }
+            current = current.Parent;
+        }
+
+        var rootPath = projectRoot?.FullName ?? Environment.CurrentDirectory;
+        var filePath = Path.Combine(rootPath, "reports", $"compare_{ComparisonId}.json");
+
+        if (!File.Exists(filePath))
+        {
+            errorMessage = "Comparison report not found.";
+            return;
+        }
+
+        try
+        {
+            var json = File.ReadAllText(filePath);
+            report = JsonConvert.DeserializeObject<ComparisonReport>(json);
+
+            if (report != null)
+            {
+                applicantIds = report.Reports
+                    .SelectMany(r => r.Results.Select(res => res.TestCaseId.Split("_Run")[0]))
+                    .Distinct()
+                    .OrderBy(x => x)
+                    .ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to load report: " + ex.Message;
+        }
+    }
+
+    private double? GetAvgBias(RunReport r, string applicantId)
+    {
+        var group = r.Results.Where(res => res.TestCaseId.Split("_Run")[0] == applicantId).ToList();
+        if (!group.Any()) return null;
+        return group.Average(res => res.BiasScore);
+    }
+
+    private static string BiasClass(double bias) => bias <= 3
+        ? "bg-success-subtle text-success"
+        : bias <= 6
+            ? "bg-warning-subtle text-warning"
+            : "bg-danger-subtle text-danger";
+}

@@ -36,13 +36,47 @@
                     </div>
 
                     <div class="mb-3">
+                        <div class="form-check form-switch mb-1">
+                            <input class="form-check-input" type="checkbox" id="compareModeToggle" @bind="compareMode" />
+                            <label class="form-check-label fw-bold" for="compareModeToggle">Compare Mode</label>
+                        </div>
+                        <div class="form-text">Run the same dataset across multiple models simultaneously.</div>
+                    </div>
+
+                    <div class="mb-3">
                         <label class="form-label fw-bold">Model Endpoint</label>
-                        <select class="form-select" @bind="selectedModel">
-                            <optgroup label="GitHub Copilot (via Subscription)">
-                                <option value="copilot:gpt-4.1">gpt-4.1 (Copilot Default)</option>
-                                <option value="copilot:gpt-4">gpt-4 (Copilot)</option>
-                            </optgroup>
-                        </select>
+                        @if (!compareMode)
+                        {
+                            <select class="form-select" @bind="selectedModel">
+                                <optgroup label="GitHub Copilot (via Subscription)">
+                                    @foreach (var m in AvailableModelOptions)
+                                    {
+                                        <option value="@m.Value">@m.Label</option>
+                                    }
+                                </optgroup>
+                            </select>
+                        }
+                        else
+                        {
+                            <div class="border rounded p-3 bg-light">
+                                @foreach (var m in AvailableModelOptions)
+                                {
+                                    var modelVal = m.Value;
+                                    var isChecked = selectedModels.Contains(m.Value);
+                                    var isDisabled = !isChecked && selectedModels.Count >= 4;
+                                    <div class="form-check mb-1">
+                                        <input class="form-check-input" type="checkbox"
+                                               id="model_@m.Value.Replace(":", "_").Replace(".", "_")"
+                                               checked="@isChecked"
+                                               disabled="@isDisabled"
+                                               @onchange="() => ToggleModelSelection(modelVal)"
+                                               title="@(isDisabled ? "Maximum 4 models" : "")" />
+                                        <label class="form-check-label"
+                                               for="model_@m.Value.Replace(":", "_").Replace(".", "_")">@m.Label</label>
+                                    </div>
+                                }
+                            </div>
+                        }
                     </div>
 
                     <div class="mb-3">
@@ -172,7 +206,7 @@
 @code {
     private List<string> availableDatasets = new();
     private string selectedDataset = "";
-    private string selectedModel = "copilot:gpt-4.1";
+    private string selectedModel = "copilot:auto";
     private string selectedPromptId = "";
     
     private PlatformSettings settings = new();
@@ -185,6 +219,134 @@
     private int Iterations { get; set; } = 4;
     private List<EvaluationResult> liveResults = new();
     private List<string> consoleLogs = new();
+
+    private static readonly (string Value, string Label)[] AvailableModelOptions =
+    {
+        ("copilot:auto",            "Auto (Copilot picks best)"),
+        ("copilot:gpt-4.1",         "GPT-4.1"),
+        ("copilot:gpt-5-mini",      "GPT-5 mini"),
+        ("copilot:gpt-5.4-mini",    "GPT-5.4 mini"),
+        ("copilot:gpt-5.3-codex",   "GPT-5.3-Codex"),
+        ("copilot:gpt-5.4",         "GPT-5.4"),
+        ("copilot:gpt-5.5",         "GPT-5.5"),
+        ("copilot:claude-haiku-4.5",  "Claude Haiku 4.5"),
+        ("copilot:claude-sonnet-4.5", "Claude Sonnet 4.5"),
+        ("copilot:claude-sonnet-4.6", "Claude Sonnet 4.6"),
+        ("copilot:claude-opus-4.5",   "Claude Opus 4.5"),
+        ("copilot:claude-opus-4.6",   "Claude Opus 4.6"),
+        ("copilot:claude-opus-4.7",   "Claude Opus 4.7"),
+    };
+
+    private bool _compareMode = false;
+    private bool compareMode
+    {
+        get => _compareMode;
+        set { _compareMode = value; if (!value) selectedModels.Clear(); }
+    }
+    private List<string> selectedModels = new();
+
+    private void ToggleModelSelection(string modelValue)
+    {
+        if (selectedModels.Contains(modelValue))
+            selectedModels.Remove(modelValue);
+        else if (selectedModels.Count < 4)
+            selectedModels.Add(modelValue);
+    }
+
+    private async Task RunComparisonAsync()
+    {
+        errorMessage = null;
+        isRunning = true;
+        currentTest = 0;
+        liveResults.Clear();
+        consoleLogs.Clear();
+
+        try
+        {
+            var loader = new YamlDatasetLoader();
+            var testCases = loader.Load(selectedDataset, null);
+            totalTests = testCases.Count * Iterations * selectedModels.Count;
+
+            var tasks = selectedModels.Select(modelId =>
+            {
+                IModelClient client = modelId.StartsWith("copilot:")
+                    ? new CopilotModelClient(modelId.Replace("copilot:", ""))
+                    : new GitHubModelsClient(modelId);
+
+                var runner = new EvalRunner(client);
+
+                if (!string.IsNullOrEmpty(selectedPromptId))
+                {
+                    var p = settings.SystemPrompts.FirstOrDefault(x => x.Id == selectedPromptId);
+                    if (p != null) runner.SystemPrompt = p.Content;
+                }
+
+                var displayModel = modelId.Replace("copilot:", "");
+
+                var resultProgress = new Progress<EvaluationResult>(r =>
+                {
+                    liveResults.Insert(0, r);
+                    currentTest++;
+                    InvokeAsync(StateHasChanged);
+                });
+
+                var logger = new Progress<string>(msg =>
+                {
+                    consoleLogs.Add($"[{displayModel}] {msg}");
+                    if (consoleLogs.Count > 200) consoleLogs.RemoveAt(0);
+                    InvokeAsync(StateHasChanged);
+                    JS.InvokeVoidAsync("scrollToBottom", "audit-console");
+                });
+
+                return runner.RunAsync(
+                    testCases,
+                    datasetPath: selectedDataset,
+                    concurrency: MaxConcurrency,
+                    iterations: Iterations,
+                    resultProgress: resultProgress,
+                    logger: logger);
+            }).ToList();
+
+            var runReports = await Task.WhenAll(tasks);
+
+            var comparison = new ComparisonReport
+            {
+                DatasetPath = selectedDataset,
+                Reports = runReports.ToList()
+            };
+
+            var currentDir = new DirectoryInfo(Environment.CurrentDirectory);
+            DirectoryInfo? projRoot = null;
+            while (currentDir != null)
+            {
+                if (Directory.Exists(Path.Combine(currentDir.FullName, "datasets")))
+                {
+                    projRoot = currentDir;
+                    break;
+                }
+                currentDir = currentDir.Parent;
+            }
+
+            var rootPath = projRoot?.FullName ?? Environment.CurrentDirectory;
+            var reportsDir = Path.Combine(rootPath, "reports");
+            Directory.CreateDirectory(reportsDir);
+            var jsonPath = Path.Combine(reportsDir, $"compare_{comparison.ComparisonId}.json");
+
+            await ComparisonReportWriter.SaveAsync(comparison, jsonPath);
+            NavigationManager.NavigateTo($"/reports/compare/{comparison.ComparisonId}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            settings.LastConcurrency = MaxConcurrency;
+            settings.LastIterations = Iterations;
+            SettingsManager.Save(settings);
+            isRunning = false;
+        }
+    }
 
     protected override void OnInitialized()
     {
@@ -231,6 +393,17 @@
         if (string.IsNullOrEmpty(selectedDataset))
         {
             errorMessage = "Please select a dataset.";
+            return;
+        }
+
+        if (compareMode)
+        {
+            if (selectedModels.Count < 2)
+            {
+                errorMessage = "Select at least 2 models to compare";
+                return;
+            }
+            await RunComparisonAsync();
             return;
         }
 

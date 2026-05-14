@@ -387,7 +387,24 @@
                                     </td>
                                 </tr>
                             }
-                            @if (!allReports.Any())
+                            @foreach (var c in allComparisons.OrderByDescending(x => x.CreatedAt))
+                            {
+                                var modelNames = string.Join(" vs ", c.Reports.Select(r => r.ModelId));
+                                <tr>
+                                    <td class="ps-4 font-monospace text-muted small">@c.ComparisonId.Substring(0, 8)...</td>
+                                    <td>@c.CreatedAt.ToString("g")</td>
+                                    <td><span class="badge bg-primary">Compare</span></td>
+                                    <td>@modelNames</td>
+                                    <td>
+                                        <span class="badge bg-info text-dark">Winner: @c.Winner</span>
+                                    </td>
+                                    <td>
+                                        <a href="/reports/compare/@c.ComparisonId" class="btn btn-sm btn-outline-primary me-1">View</a>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteComparisonList(c.ComparisonId)"><i class="bi bi-trash"></i></button>
+                                    </td>
+                                </tr>
+                            }
+                            @if (!allReports.Any() && !allComparisons.Any())
                             {
                                 <tr>
                                     <td colspan="6" class="text-center py-4 text-muted">No reports found. Run an evaluation first.</td>
@@ -463,6 +480,7 @@
     }
 
     private List<RunReport> allReports = new();
+    private List<ComparisonReport> allComparisons = new();
     private RunReport? currentReport;
     private string? errorMessage;
     private HashSet<string> expandedRows = new();
@@ -496,6 +514,17 @@
             File.Delete(file);
         }
         NavigationManager.NavigateTo("/reports");
+    }
+
+    private void DeleteComparisonList(string comparisonId)
+    {
+        var rootPath = GetProjectRoot();
+        var file = Path.Combine(rootPath, "reports", $"compare_{comparisonId}.json");
+        if (File.Exists(file))
+        {
+            File.Delete(file);
+            allComparisons.RemoveAll(c => c.ComparisonId == comparisonId);
+        }
     }
 
     private void DeleteReportList(string runId)
@@ -545,17 +574,32 @@
         {
             // Load all reports for list view
             allReports.Clear();
+            allComparisons.Clear();
             if (Directory.Exists(reportsDir))
             {
                 foreach (var file in Directory.GetFiles(reportsDir, "*.json"))
                 {
-                    try
+                    var fileName = Path.GetFileName(file);
+                    if (fileName.StartsWith("compare_"))
                     {
-                        var json = File.ReadAllText(file);
-                        var report = JsonSerializer.Deserialize<RunReport>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                        if (report != null) allReports.Add(report);
+                        try
+                        {
+                            var json = File.ReadAllText(file);
+                            var report = Newtonsoft.Json.JsonConvert.DeserializeObject<ComparisonReport>(json);
+                            if (report != null) allComparisons.Add(report);
+                        }
+                        catch { /* skip invalid */ }
                     }
-                    catch { /* skip invalid */ }
+                    else
+                    {
+                        try
+                        {
+                            var json = File.ReadAllText(file);
+                            var report = JsonSerializer.Deserialize<RunReport>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                            if (report != null) allReports.Add(report);
+                        }
+                        catch { /* skip invalid */ }
+                    }
                 }
             }
         }
