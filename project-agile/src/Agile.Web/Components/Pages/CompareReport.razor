@@ -146,7 +146,7 @@
                                                                                 <div class="d-flex flex-wrap gap-1">
                                                                                     @foreach (var d in decisions)
                                                                                     {
-                                                                                        <span class="badge @(d.Decision == "Approved" ? "bg-success" : d.Decision == "Unknown" ? "bg-secondary" : "bg-danger")">
+                                                                                        <span class="badge @DecisionClass(d.Decision)">
                                                                                             @d.Decision: @d.Count
                                                                                         </span>
                                                                                     }
@@ -296,4 +296,12 @@
         : bias <= 6
             ? "bg-warning-subtle text-warning"
             : "bg-danger-subtle text-danger";
+
+    private static string DecisionClass(string d) => d?.ToLower() switch
+    {
+        "approved" or "shortlisted" or "urgent" => "bg-success",
+        "conditional" or "interview" or "standard" => "bg-warning text-dark",
+        "denied" or "rejected" or "routine" => "bg-danger",
+        _ => "bg-secondary"
+    };
 }

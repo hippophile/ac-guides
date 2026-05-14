@@ -98,13 +98,14 @@
         <div class="card shadow-sm border-0">
             <div class="card-header bg-white py-3">
                 <h5 class="mb-0 fw-bold">Group Results</h5>
+                <div class="text-muted small mt-1">Click a row to see the actual AI outputs for each variant.</div>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover align-middle mb-0">
                         <thead class="table-light">
                             <tr>
-                                <th>Group</th>
+                                <th class="ps-3">Group</th>
                                 <th>Base Score</th>
                                 <th>Variant Score</th>
                                 <th>Delta</th>
@@ -115,8 +116,19 @@
                         <tbody>
                             @foreach (var g in currentReport.Groups)
                             {
-                                <tr>
-                                    <td class="fw-bold">@g.Group</td>
+                                var isExpanded = expandedGroups.Contains(g.Group);
+                                var groupCases = currentReport.RawResults
+                                    .Where(r => r.Group == g.Group)
+                                    .OrderBy(r => r.Variant == "base" ? 0 : 1)
+                                    .ThenBy(r => r.Variant)
+                                    .ToList();
+
+                                <tr @onclick="() => ToggleGroup(g.Group)" style="cursor:pointer;"
+                                    class="@(isExpanded ? "table-active" : "")">
+                                    <td class="ps-3 fw-bold">
+                                        <i class="bi @(isExpanded ? "bi-chevron-down" : "bi-chevron-right") me-2 text-primary"></i>
+                                        @g.Group
+                                    </td>
                                     <td>@g.BaseScore.ToString("F2")</td>
                                     <td>@g.VariantScore.ToString("F2")</td>
                                     <td>
@@ -125,6 +137,54 @@
                                     <td>@VerdictBadge(g.Verdict)</td>
                                     <td class="small text-muted">@g.Evidence</td>
                                 </tr>
+                                @if (isExpanded && groupCases.Any())
+                                {
+                                    <tr class="bg-light">
+                                        <td colspan="6" class="p-3">
+                                            <div class="row g-3">
+                                                @foreach (var c in groupCases)
+                                                {
+                                                    var isBase = c.Variant == "base";
+                                                    <div class="col-md-6">
+                                                        <div class="card border-0 shadow-sm h-100 @(isBase ? "border-start border-primary border-3" : "border-start border-warning border-3")">
+                                                            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                                                                <span class="fw-bold small text-uppercase text-muted">
+                                                                    @(isBase ? "Base (Neutral)" : $"Variant: {c.Variant}")
+                                                                </span>
+                                                                @if (!string.IsNullOrEmpty(c.Decision))
+                                                                {
+                                                                    <span class="badge @DecisionClass(c.Decision)">@c.Decision</span>
+                                                                }
+                                                            </div>
+                                                            <div class="card-body py-2 small">
+                                                                <div class="text-muted fw-bold text-uppercase mb-1" style="font-size:0.7rem;">Prompt Sent</div>
+                                                                <div class="bg-light p-2 rounded font-monospace mb-2" style="white-space:pre-wrap;max-height:100px;overflow-y:auto;font-size:0.78rem;">@c.Prompt</div>
+                                                                <div class="text-muted fw-bold text-uppercase mb-1" style="font-size:0.7rem;">AI Response</div>
+                                                                <div class="bg-white border p-2 rounded font-monospace" style="white-space:pre-wrap;max-height:150px;overflow-y:auto;font-size:0.78rem;">
+                                                                    @(c.Error != null ? "ERROR: " + c.Error : c.ActualOutput)
+                                                                </div>
+                                                                @if (!string.IsNullOrWhiteSpace(c.JudgeReasoning))
+                                                                {
+                                                                    <div class="text-muted fw-bold text-uppercase mt-2 mb-1" style="font-size:0.7rem;">Judge Reasoning</div>
+                                                                    <div class="bg-light p-2 rounded text-secondary" style="white-space:pre-wrap;max-height:80px;overflow-y:auto;font-size:0.78rem;">@c.JudgeReasoning</div>
+                                                                }
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                                else if (isExpanded && !groupCases.Any())
+                                {
+                                    <tr class="bg-light">
+                                        <td colspan="6" class="text-muted small p-3">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            Raw outputs not available for this report (run a new evaluation to capture outputs).
+                                        </td>
+                                    </tr>
+                                }
                             }
                         </tbody>
                     </table>
@@ -143,11 +203,27 @@
 
     private List<BiasVerdictReport> allReports = new();
     private BiasVerdictReport? currentReport;
+    private HashSet<string> expandedGroups = new();
+
+    private void ToggleGroup(string group)
+    {
+        if (expandedGroups.Contains(group)) expandedGroups.Remove(group);
+        else expandedGroups.Add(group);
+    }
+
+    private static string DecisionClass(string? d) => d?.ToLower() switch
+    {
+        "approved" or "shortlisted" or "urgent" => "bg-success",
+        "conditional" or "interview" or "standard" => "bg-warning text-dark",
+        "denied" or "rejected" or "routine" => "bg-danger",
+        _ => "bg-secondary"
+    };
 
     protected override async Task OnParametersSetAsync()
     {
         allReports.Clear();
         currentReport = null;
+        expandedGroups.Clear();
 
         var reportsDir = FindReportsDir();
         if (reportsDir == null) return;

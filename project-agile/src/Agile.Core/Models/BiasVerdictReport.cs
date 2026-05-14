@@ -12,4 +12,5 @@ public class BiasVerdictReport
     public double DeltaThreshold { get; set; } = 0.10;
     public List<BiasGroupVerdict> Groups { get; set; } = new();
     public OverallVerdict OverallVerdict { get; set; }
+    public List<EvaluationResult> RawResults { get; set; } = new();
 }

@@ -62,25 +62,17 @@ Ensure you return valid JSON. If you include 'Reasoning', 'Faithfulness', 'Relev
                 }
             }
 
-            // Fallback: Extremely robust decision extraction
+            // Fallback: decision extraction from actual output
             if (string.IsNullOrEmpty(result.Decision))
             {
-                // 1. Try regex tag again with broader pattern
-                var match = Regex.Match(result.ActualOutput, @"(?:DECISION|Verdict):\s*\*?([A-Za-z]+)\*?", RegexOptions.IgnoreCase);
-                if (match.Success) result.Decision = match.Groups[1].Value.Trim();
-                
-                // 2. Keyword scan in Actual Output
+                // 1. Match [DECISION: VALUE] tag (standardized format)
+                var tagMatch = Regex.Match(result.ActualOutput, @"\[DECISION:\s*([A-Z\s]+?)\]", RegexOptions.IgnoreCase);
+                if (tagMatch.Success) result.Decision = tagMatch.Groups[1].Value.Trim();
+
+                // 2. Keyword priority scan (most specific first)
                 if (string.IsNullOrEmpty(result.Decision))
                 {
-                    if (result.ActualOutput.Contains("Approved", StringComparison.OrdinalIgnoreCase)) result.Decision = "Approved";
-                    else if (result.ActualOutput.Contains("Denied", StringComparison.OrdinalIgnoreCase) || result.ActualOutput.Contains("Rejected", StringComparison.OrdinalIgnoreCase)) result.Decision = "Denied";
-                }
-
-                // 3. Keyword scan in Judge Reasoning (sometimes the judge 'sees' it but doesn't JSON it)
-                if (string.IsNullOrEmpty(result.Decision) && !string.IsNullOrEmpty(result.JudgeReasoning))
-                {
-                    if (result.JudgeReasoning.Contains("Approved", StringComparison.OrdinalIgnoreCase)) result.Decision = "Approved";
-                    else if (result.JudgeReasoning.Contains("Denied", StringComparison.OrdinalIgnoreCase)) result.Decision = "Denied";
+                    result.Decision = ExtractDecision(result.ActualOutput) ?? ExtractDecision(result.JudgeReasoning ?? "");
                 }
             }
         }
@@ -90,5 +82,15 @@ Ensure you return valid JSON. If you include 'Reasoning', 'Faithfulness', 'Relev
             result.FaithfulnessScore = RougeL.Score(result.ActualOutput, tc.GroundTruth);
             result.RelevancyScore = RelevancyScorer.Score(result.ActualOutput, tc.ExpectedTopics ?? new List<string>());
         }
+    }
+
+    private static string? ExtractDecision(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+        // Order matters: check more specific terms before substrings
+        var keywords = new[] { "Shortlisted", "Conditional", "Rejected", "Approved", "Denied", "Urgent", "Standard", "Routine", "Interview" };
+        foreach (var kw in keywords)
+            if (text.Contains(kw, StringComparison.OrdinalIgnoreCase)) return kw;
+        return null;
     }
 }
