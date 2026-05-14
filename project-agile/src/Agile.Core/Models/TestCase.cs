@@ -11,6 +11,8 @@ public class TestCase
     public string GroundTruth { get; set; } = string.Empty;
     public List<BiasVariant> BiasVariants { get; set; } = new();
     public string EvaluationNotes { get; set; } = string.Empty;
+    public string Group { get; set; } = string.Empty;
+    public string Variant { get; set; } = string.Empty;
 }
 
 public class BiasVariant

@@ -1,5 +1,6 @@
 using Agile.Core.Clients;
 using Agile.Core.Datasets;
+using Agile.Core.Judge;
 using Agile.Core.Reports;
 using Agile.Core.Runner;
 using Spectre.Console;
@@ -33,6 +34,18 @@ public class RunEvalSettings : CommandSettings
     [CommandOption("--template <PATH>")]
     [Description("Path to Scriban HTML template")]
     public string Template { get; set; } = "templates/report.scriban.html";
+
+    [CommandOption("--judge")]
+    [Description("Enable LLM-as-judge scoring for bias variant pairs")]
+    public bool Judge { get; set; }
+
+    [CommandOption("--judge-model <NAME>")]
+    [Description("Model ID to use as judge (must differ from --model)")]
+    public string JudgeModel { get; set; } = string.Empty;
+
+    [CommandOption("--judge-template <PATH>")]
+    [Description("Path to judge prompt template")]
+    public string JudgeTemplate { get; set; } = "templates/judge_prompt.md";
 }
 
 public class RunEvalCommand : AsyncCommand<RunEvalSettings>
@@ -56,8 +69,7 @@ public class RunEvalCommand : AsyncCommand<RunEvalSettings>
         List<Agile.Core.Models.TestCase> testCases;
         try
         {
-            var loader = new YamlDatasetLoader();
-            testCases = loader.Load(settings.Dataset, settings.Category);
+            testCases = DatasetLoaderFactory.Load(settings.Dataset, settings.Category);
         }
         catch (DatasetValidationException ex)
         {
@@ -80,6 +92,36 @@ public class RunEvalCommand : AsyncCommand<RunEvalSettings>
         }
 
         var runner = new EvalRunner(client) { DelayBetweenCallsMs = settings.DelayMs };
+
+        if (settings.Judge)
+        {
+            var judgeModelId = string.IsNullOrWhiteSpace(settings.JudgeModel)
+                ? "gpt-4o-mini"
+                : settings.JudgeModel;
+
+            IModelClient judgeClient;
+            try
+            {
+                judgeClient = new GitHubModelsClient(judgeModelId);
+            }
+            catch (InvalidOperationException ex)
+            {
+                AnsiConsole.MarkupLine($"[red]Judge client error:[/] {ex.Message}");
+                return 1;
+            }
+
+            try
+            {
+                runner.Judge = new LlmJudge(judgeClient, settings.Model, settings.JudgeTemplate);
+                runner.EnableJudge = true;
+                AnsiConsole.MarkupLine($"Judge: [cyan]{judgeModelId}[/] | Template: [dim]{settings.JudgeTemplate}[/]");
+            }
+            catch (ArgumentException ex)
+            {
+                AnsiConsole.MarkupLine($"[red]Judge config error:[/] {ex.Message}");
+                return 1;
+            }
+        }
 
         Agile.Core.Models.RunReport report = null!;
 

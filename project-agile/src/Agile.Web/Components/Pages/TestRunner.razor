@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @using Agile.Core.Clients
 @using Agile.Core.Datasets
+@using Agile.Core.Metrics
 @using Agile.Core.Models
 @using Agile.Core.Reports
 @using Agile.Core.Runner
@@ -26,14 +27,23 @@
                 <div class="card-body">
                     <div class="mb-3">
                         <label class="form-label fw-bold">Dataset</label>
-                        <select class="form-select" @bind="selectedDataset">
+                        <select class="form-select" @bind="selectedDataset" @bind:after="OnDatasetChanged">
                             <option value="">-- Select a dataset --</option>
                             @foreach (var ds in availableDatasets)
                             {
-                                <option value="@ds">@Path.GetFileName(ds)</option>
+                                var isJsonl = ds.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase);
+                                var label = isJsonl ? $"[JSONL] {Path.GetFileName(ds)}" : Path.GetFileName(ds);
+                                <option value="@ds">@label</option>
                             }
                         </select>
                     </div>
+
+                    @if (isCounterfactualMode)
+                    {
+                        <div class="alert alert-info py-2 small mb-3">
+                            <i class="bi bi-shuffle me-1"></i> <strong>Counterfactual dataset detected</strong> — bias audit mode enabled.
+                        </div>
+                    }
 
                     <div class="mb-3">
                         <div class="form-check form-switch mb-1">
@@ -237,6 +247,8 @@
         ("copilot:claude-opus-4.7",   "Claude Opus 4.7"),
     };
 
+    private bool isCounterfactualMode = false;
+
     private bool _compareMode = false;
     private bool compareMode
     {
@@ -253,6 +265,25 @@
             selectedModels.Add(modelValue);
     }
 
+    private void OnDatasetChanged()
+    {
+        if (string.IsNullOrEmpty(selectedDataset) || !selectedDataset.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase))
+        {
+            isCounterfactualMode = false;
+            return;
+        }
+
+        try
+        {
+            var cases = new JsonlDatasetLoader().Load(selectedDataset);
+            isCounterfactualMode = cases.Any(c => !string.IsNullOrEmpty(c.Group) && !string.IsNullOrEmpty(c.Variant));
+        }
+        catch
+        {
+            isCounterfactualMode = false;
+        }
+    }
+
     private async Task RunComparisonAsync()
     {
         errorMessage = null;
@@ -263,8 +294,7 @@
 
         try
         {
-            var loader = new YamlDatasetLoader();
-            var testCases = loader.Load(selectedDataset, null);
+            var testCases = DatasetLoaderFactory.Load(selectedDataset);
             totalTests = testCases.Count * Iterations * selectedModels.Count;
 
             var tasks = selectedModels.Select(modelId =>
@@ -367,7 +397,10 @@
         if (projectRoot != null)
         {
             var datasetsDir = Path.Combine(projectRoot.FullName, "datasets", "golden");
-            availableDatasets = Directory.GetFiles(datasetsDir, "*.yaml").ToList();
+            availableDatasets = Directory.GetFiles(datasetsDir, "*.yaml")
+                .Concat(Directory.GetFiles(datasetsDir, "*.jsonl"))
+                .OrderBy(x => x)
+                .ToList();
             if (availableDatasets.Any())
             {
                 selectedDataset = availableDatasets.First();
@@ -407,6 +440,12 @@
             return;
         }
 
+        if (isCounterfactualMode)
+        {
+            await RunBiasAuditAsync();
+            return;
+        }
+
         errorMessage = null;
         isRunning = true;
         currentTest = 0;
@@ -414,8 +453,7 @@
         
         try
         {
-            var loader = new YamlDatasetLoader();
-            var testCases = loader.Load(selectedDataset, null);
+            var testCases = DatasetLoaderFactory.Load(selectedDataset);
             totalTests = testCases.Count;
 
             IModelClient client = selectedModel.StartsWith("copilot:") 
@@ -492,11 +530,112 @@
         }
         finally
         {
-            // Save settings to remember concurrency/iterations
             settings.LastConcurrency = MaxConcurrency;
             settings.LastIterations = Iterations;
             SettingsManager.Save(settings);
-            
+            isRunning = false;
+        }
+    }
+
+    private async Task RunBiasAuditAsync()
+    {
+        errorMessage = null;
+        isRunning = true;
+        currentTest = 0;
+        liveResults.Clear();
+        consoleLogs.Clear();
+
+        try
+        {
+            var testCases = DatasetLoaderFactory.Load(selectedDataset);
+            totalTests = testCases.Count;
+
+            IModelClient client = selectedModel.StartsWith("copilot:")
+                ? new CopilotModelClient(selectedModel.Replace("copilot:", ""))
+                : new GitHubModelsClient(selectedModel);
+
+            var runner = new EvalRunner(client);
+            if (!string.IsNullOrEmpty(selectedPromptId))
+            {
+                var p = settings.SystemPrompts.FirstOrDefault(x => x.Id == selectedPromptId);
+                if (p != null) runner.SystemPrompt = p.Content;
+            }
+
+            var resultProgress = new Progress<EvaluationResult>(r =>
+            {
+                liveResults.Insert(0, r);
+                currentTest++;
+                InvokeAsync(StateHasChanged);
+            });
+
+            var logger = new Progress<string>(msg =>
+            {
+                consoleLogs.Add(msg);
+                if (consoleLogs.Count > 200) consoleLogs.RemoveAt(0);
+                InvokeAsync(StateHasChanged);
+                JS.InvokeVoidAsync("scrollToBottom", "audit-console");
+            });
+
+            var report = await runner.RunAsync(
+                testCases,
+                datasetPath: selectedDataset,
+                concurrency: MaxConcurrency,
+                iterations: 1,
+                resultProgress: resultProgress,
+                logger: logger);
+
+            consoleLogs.Add("[BIAS-SCORER] Running counterfactual analysis...");
+            await InvokeAsync(StateHasChanged);
+
+            var judgeModel = selectedModel;
+            IModelClient judgeClient = judgeModel.StartsWith("copilot:")
+                ? new CopilotModelClient(judgeModel.Replace("copilot:", ""))
+                : new GitHubModelsClient(judgeModel);
+
+            var scorer = new CounterfactualBiasScorer(judgeClient);
+            var groupVerdicts = await scorer.ScoreAsync(report.Results, logger);
+
+            var overallVerdict = groupVerdicts.Any(g => g.Verdict == Agile.Core.Models.GroupVerdict.FAIL)
+                ? Agile.Core.Models.OverallVerdict.NON_COMPLIANT
+                : groupVerdicts.Any(g => g.Verdict == Agile.Core.Models.GroupVerdict.BORDERLINE)
+                    ? Agile.Core.Models.OverallVerdict.REVIEW_REQUIRED
+                    : Agile.Core.Models.OverallVerdict.COMPLIANT;
+
+            var biasReport = new Agile.Core.Models.BiasVerdictReport
+            {
+                ModelId = client.ModelId,
+                JudgeModelId = judgeClient.ModelId,
+                DatasetPath = selectedDataset,
+                Groups = groupVerdicts,
+                OverallVerdict = overallVerdict,
+            };
+
+            var currentDir = new DirectoryInfo(Environment.CurrentDirectory);
+            DirectoryInfo? projRoot = null;
+            while (currentDir != null)
+            {
+                if (Directory.Exists(Path.Combine(currentDir.FullName, "datasets")))
+                {
+                    projRoot = currentDir;
+                    break;
+                }
+                currentDir = currentDir.Parent;
+            }
+
+            var rootPath = projRoot?.FullName ?? Environment.CurrentDirectory;
+            await Agile.Core.Reports.BiasVerdictReportWriter.SaveAsync(biasReport, Path.Combine(rootPath, "reports"));
+
+            NavigationManager.NavigateTo($"/bias-verdict/{biasReport.RunId}");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            settings.LastConcurrency = MaxConcurrency;
+            settings.LastIterations = Iterations;
+            SettingsManager.Save(settings);
             isRunning = false;
         }
     }

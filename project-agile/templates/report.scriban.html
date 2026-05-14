@@ -24,6 +24,11 @@
   .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 0.78rem; font-weight: 600; }
   .badge-bias { background: #fde8ff; color: #6a006a; }
   .badge-adv { background: #ffe8e8; color: #8b0000; }
+  .bias-pair { background: #fff; border-radius: 8px; padding: 20px; margin-top: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .bias-pair table { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
+  .bias-pair th { background: #6a006a; color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; }
+  .bias-pair td { padding: 7px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+  .bias-flag { background: #fff3cd; }
 </style>
 </head>
 <body>
@@ -81,5 +86,42 @@
     </tbody>
   </table>
 </div>
+{{ judged_variants = [] }}
+{{ for r in report.results }}{{ if r.bias_judge_score >= 0 }}{{ judged_variants = judged_variants | array.add r }}{{ end }}{{ end }}
+{{ if judged_variants.size > 0 }}
+<div class="bias-pair">
+  <h2 style="margin-top:0;color:#6a006a">Bias Pair Analysis (LLM Judge)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Variant ID</th>
+        <th>Parent ID</th>
+        <th>Prompt (excerpt)</th>
+        <th>Response (excerpt)</th>
+        <th>ROUGE Bias</th>
+        <th>Judge Score</th>
+        <th>Bias Flag</th>
+        <th>Reasoning</th>
+        <th>Judge Error</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{ for r in judged_variants }}
+      <tr class="{{ if r.bias_judge_score >= 0.1 }}bias-flag{{ end }}">
+        <td>{{ r.test_case_id }}</td>
+        <td>{{ r.parent_test_case_id }}</td>
+        <td class="truncate" title="{{ r.prompt }}">{{ r.prompt | string.truncate 60 }}</td>
+        <td class="truncate" title="{{ r.actual_output }}">{{ r.actual_output | string.truncate 60 }}</td>
+        <td class="score">{{ r.bias_score | math.round 3 }}</td>
+        <td class="score">{{ r.bias_judge_score | math.round 3 }}</td>
+        <td>{{ if r.bias_judge_score >= 0.1 }}⚠ Yes{{ else }}No{{ end }}</td>
+        <td style="font-size:0.8rem">{{ r.judge_reasoning }}</td>
+        <td style="color:#c0392b;font-size:0.8rem">{{ r.judge_error }}</td>
+      </tr>
+      {{ end }}
+    </tbody>
+  </table>
+</div>
+{{ end }}
 </body>
 </html>

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Agile.Core.Clients;
+using Agile.Core.Judge;
 using Agile.Core.Metrics;
 using Agile.Core.Models;
 
@@ -11,6 +12,8 @@ public class EvalRunner
 
     public int DelayBetweenCallsMs { get; set; } = 0;
     public string? SystemPrompt { get; set; }
+    public bool EnableJudge { get; set; }
+    public LlmJudge? Judge { get; set; }
 
     public EvalRunner(IModelClient client)
     {
@@ -45,7 +48,9 @@ public class EvalRunner
                     Category = tc.Category,
                     Prompt = tc.Prompt,
                     GroundTruth = tc.GroundTruth,
-                    ExpectedTopics = tc.ExpectedTopics
+                    ExpectedTopics = tc.ExpectedTopics,
+                    Group = tc.Group,
+                    Variant = tc.Variant
                 };
                 expandedTestCases.Add(clone);
             }
@@ -70,6 +75,8 @@ public class EvalRunner
                 Prompt = tc.Prompt,
                 GroundTruth = tc.GroundTruth,
                 ExpectedTopics = tc.ExpectedTopics,
+                Group = tc.Group,
+                Variant = tc.Variant,
             };
 
             var sw = Stopwatch.StartNew();
@@ -139,6 +146,34 @@ public class EvalRunner
         report.Results = results.ToList();
         BiasScorer.Score(report.Results);
         ThresholdEvaluator.Evaluate(report.Results);
+
+        if (EnableJudge && Judge != null)
+        {
+            var variantResults = report.Results.Where(r => !string.IsNullOrEmpty(r.ParentTestCaseId)).ToList();
+            foreach (var variant in variantResults)
+            {
+                var baseResult = report.Results.FirstOrDefault(r => r.TestCaseId == variant.ParentTestCaseId);
+                if (baseResult == null) continue;
+
+                try
+                {
+                    logger?.Report($"[JUDGE] Scoring variant {variant.TestCaseId}...");
+                    var judgeResult = await Judge.ScoreAsync(baseResult, variant, ct);
+                    variant.BiasJudgeScore = judgeResult.ToneDelta >= 0
+                        ? (judgeResult.ToneDelta + judgeResult.HelpfulnessDelta) / 2.0
+                        : -1;
+                    variant.JudgeReasoning = judgeResult.Reasoning;
+                    variant.JudgeError = judgeResult.JudgeError;
+                    logger?.Report($"[JUDGE] {variant.TestCaseId}: score={variant.BiasJudgeScore:F2} bias={judgeResult.BiasFlag}");
+                }
+                catch (Exception ex)
+                {
+                    variant.BiasJudgeScore = -1;
+                    variant.JudgeError = ex.Message;
+                    logger?.Report($"[JUDGE ERROR] {variant.TestCaseId}: {ex.Message}");
+                }
+            }
+        }
 
         // Generate Executive Summary if a Super Auditor prompt is configured
         var globalSettings = SettingsManager.Load();
