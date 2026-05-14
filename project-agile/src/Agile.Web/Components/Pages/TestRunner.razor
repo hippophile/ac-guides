@@ -43,6 +43,23 @@
                         <div class="alert alert-info py-2 small mb-3">
                             <i class="bi bi-shuffle me-1"></i> <strong>Counterfactual dataset detected</strong> — bias audit mode enabled.
                         </div>
+
+                        @if (availableGroups.Count > 1)
+                        {
+                            <div class="mb-3">
+                                <label class="form-label fw-bold">Groups to Run</label>
+                                <div class="form-text mb-2">Select which groups to include. Deselect to skip.</div>
+                                @foreach (var grp in availableGroups)
+                                {
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="grp_@grp"
+                                               checked="@selectedGroups.Contains(grp)"
+                                               @onchange="() => ToggleGroup(grp)" />
+                                        <label class="form-check-label small" for="grp_@grp">@grp</label>
+                                    </div>
+                                }
+                            </div>
+                        }
                     }
 
                     <div class="mb-3">
@@ -256,6 +273,8 @@
         set { _compareMode = value; if (!value) selectedModels.Clear(); }
     }
     private List<string> selectedModels = new();
+    private List<string> availableGroups = new();
+    private HashSet<string> selectedGroups = new();
 
     private void ToggleModelSelection(string modelValue)
     {
@@ -265,18 +284,30 @@
             selectedModels.Add(modelValue);
     }
 
+    private void ToggleGroup(string group)
+    {
+        if (selectedGroups.Contains(group)) selectedGroups.Remove(group);
+        else selectedGroups.Add(group);
+    }
+
     private void OnDatasetChanged()
     {
+        availableGroups.Clear();
+        selectedGroups.Clear();
+        isCounterfactualMode = false;
+
         if (string.IsNullOrEmpty(selectedDataset) || !selectedDataset.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase))
-        {
-            isCounterfactualMode = false;
             return;
-        }
 
         try
         {
             var cases = new JsonlDatasetLoader().Load(selectedDataset);
             isCounterfactualMode = cases.Any(c => !string.IsNullOrEmpty(c.Group) && !string.IsNullOrEmpty(c.Variant));
+            if (isCounterfactualMode)
+            {
+                availableGroups = cases.Select(c => c.Group).Where(g => !string.IsNullOrEmpty(g)).Distinct().OrderBy(g => g).ToList();
+                selectedGroups = availableGroups.ToHashSet();
+            }
         }
         catch
         {
@@ -547,8 +578,11 @@
 
         try
         {
-            var testCases = DatasetLoaderFactory.Load(selectedDataset);
-            totalTests = testCases.Count;
+            var allCases = DatasetLoaderFactory.Load(selectedDataset);
+            var testCases = selectedGroups.Any()
+                ? allCases.Where(c => string.IsNullOrEmpty(c.Group) || selectedGroups.Contains(c.Group)).ToList()
+                : allCases;
+            totalTests = testCases.Count * Iterations;
 
             IModelClient client = selectedModel.StartsWith("copilot:")
                 ? new CopilotModelClient(selectedModel.Replace("copilot:", ""))
@@ -580,7 +614,7 @@
                 testCases,
                 datasetPath: selectedDataset,
                 concurrency: MaxConcurrency,
-                iterations: 1,
+                iterations: Iterations,
                 resultProgress: resultProgress,
                 logger: logger);
 

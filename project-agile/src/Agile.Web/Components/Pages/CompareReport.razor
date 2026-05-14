@@ -212,7 +212,7 @@
         if (report == null) return;
         var html = ReportHtmlExporter.GenerateComparisonReport(report);
         var filename = $"agile-comparison-{ComparisonId![..8]}-{DateTime.Now:yyyy-MM-dd}.html";
-        await JS.InvokeVoidAsync("downloadFile", filename, html);
+        await JS.InvokeVoidAsync("printAsPdf", html);
     }
 
     private void DeleteReport()

@@ -9,3 +9,15 @@ window.downloadFile = function (filename, content) {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 };
+
+window.printAsPdf = function (content) {
+    const win = window.open('', '_blank');
+    win.document.write(content);
+    win.document.close();
+    win.onload = function () { win.print(); };
+};
+
+window.scrollToBottom = function (id) {
+    const el = document.getElementById(id);
+    if (el) el.scrollTop = el.scrollHeight;
+};

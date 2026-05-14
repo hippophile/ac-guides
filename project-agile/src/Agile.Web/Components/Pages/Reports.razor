@@ -511,7 +511,7 @@
         if (currentReport == null) return;
         var html = ReportHtmlExporter.GenerateRunReport(currentReport);
         var filename = $"agile-report-{currentReport.RunId[..8]}-{DateTime.Now:yyyy-MM-dd}.html";
-        await JS.InvokeVoidAsync("downloadFile", filename, html);
+        await JS.InvokeVoidAsync("printAsPdf", html);
     }
 
     private void DeleteCurrentReport()

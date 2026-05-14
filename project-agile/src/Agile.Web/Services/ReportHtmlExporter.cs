@@ -26,7 +26,15 @@ tr:hover{background:#f8f9fa;}
 .footer{text-align:center;color:#adb5bd;font-size:0.8rem;margin-top:30px;}
 .pill{display:inline-block;padding:6px 18px;border-radius:20px;font-weight:700;font-size:1rem;color:#fff;margin-top:10px;}
 .bar-wrap{background:#e9ecef;border-radius:4px;height:12px;width:120px;display:inline-block;}
-.bar{height:100%;border-radius:4px;}";
+.bar{height:100%;border-radius:4px;}
+@media print{
+  body{background:#fff;padding:0;}
+  .header,.card,.stat{box-shadow:none;border:1px solid #dee2e6;}
+  .stats{grid-template-columns:repeat(4,1fr);}
+  tr{page-break-inside:avoid;}
+  .example-block{page-break-inside:avoid;}
+  @page{margin:20mm;size:A4;}
+}";
 
     private static string Doc(string title, string accentColor, string body) =>
         $"<!DOCTYPE html><html lang='en'><head><meta charset='utf-8'/><title>{HttpUtility.HtmlEncode(title)}</title>" +
@@ -38,6 +46,20 @@ tr:hover{background:#f8f9fa;}
 
     private static (string bg, string fg) BiasColor(double bias) =>
         bias > 6 ? ("#dc3545", "#fff") : bias > 3 ? ("#ffc107", "#000") : ("#198754", "#fff");
+
+    private static string DecisionBg(string? d) => d?.ToLowerInvariant() switch
+    {
+        "approved" or "shortlisted" or "urgent" => "#198754",
+        "conditional" or "interview" or "standard" => "#ffc107",
+        "denied" or "rejected" or "routine" => "#dc3545",
+        _ => "#6c757d"
+    };
+
+    private static string DecisionFg(string? d) => d?.ToLowerInvariant() switch
+    {
+        "conditional" or "interview" or "standard" => "#000",
+        _ => "#fff"
+    };
 
     // ── RunReport ────────────────────────────────────────────────────────────
 
@@ -113,8 +135,21 @@ tr:hover{background:#f8f9fa;}
             : r.OverallVerdict == OverallVerdict.REVIEW_REQUIRED ? "#ffc107" : "#dc3545";
         var pillFg = r.OverallVerdict == OverallVerdict.REVIEW_REQUIRED ? "#000" : "#fff";
 
+        var raw = r.RawResults ?? new();
+        var totalCases = raw.Count;
+        var failGroups = r.Groups.Count(g => g.Verdict == GroupVerdict.FAIL);
+        var borderlineGroups = r.Groups.Count(g => g.Verdict == GroupVerdict.BORDERLINE);
+        var avgMismatch = r.Groups.Count > 0 ? r.Groups.Average(g => g.Delta) : 0.0;
+        var decisions = raw
+            .Where(x => !string.IsNullOrEmpty(x.Decision))
+            .GroupBy(x => x.Decision!.ToUpperInvariant())
+            .Select(g => (Decision: g.Key, Count: g.Count()))
+            .OrderByDescending(x => x.Count)
+            .ToList();
+
         var sb = new StringBuilder();
 
+        // ── Header ──
         sb.Append("<div class='header'>");
         sb.Append("<h1>AGILE Counterfactual Bias Audit</h1>");
         sb.Append("<div class='meta'>");
@@ -125,22 +160,118 @@ tr:hover{background:#f8f9fa;}
         sb.Append($"<div class='pill' style='background:{accentColor};color:{pillFg};'>{r.OverallVerdict}</div>");
         sb.Append("</div>");
 
+        // ── Stats grid ──
+        sb.Append("<div class='stats'>");
+        sb.Append($"<div class='stat'><div class='stat-val' style='color:#0d6efd;'>{totalCases}</div><div class='stat-lbl'>Cases Run</div></div>");
+        sb.Append($"<div class='stat'><div class='stat-val' style='color:{(failGroups > 0 ? "#dc3545" : "#198754")};'>{failGroups}/{r.Groups.Count}</div><div class='stat-lbl'>Groups Failed</div></div>");
+        sb.Append($"<div class='stat'><div class='stat-val' style='color:{(borderlineGroups > 0 ? "#fd7e14" : "#198754")};'>{borderlineGroups}</div><div class='stat-lbl'>Borderline Groups</div></div>");
+        sb.Append($"<div class='stat'><div class='stat-val' style='color:{(avgMismatch >= 0.20 ? "#dc3545" : "#198754")};'>{avgMismatch:P0}</div><div class='stat-lbl'>Avg Mismatch Rate</div></div>");
+        sb.Append("</div>");
+
+        // ── Decision distribution (the officer) ──
+        if (decisions.Any())
+        {
+            sb.Append("<div class='card'><h2>Decision Distribution — What the Model Said</h2>");
+            sb.Append("<table><thead><tr><th>Decision</th><th>Count</th><th>Share</th><th></th></tr></thead><tbody>");
+            foreach (var (dec, count) in decisions)
+            {
+                var pct = totalCases > 0 ? count * 100.0 / totalCases : 0;
+                var bg = dec.ToLower() switch
+                {
+                    "approved" or "shortlisted" or "urgent" => "#198754",
+                    "conditional" or "interview" or "standard" => "#ffc107",
+                    _ => "#dc3545"
+                };
+                var fg = dec.ToLower() is "conditional" or "interview" or "standard" ? "#000" : "#fff";
+                sb.Append($"<tr><td>{Badge(dec, bg, fg)}</td><td style='font-weight:700;'>{count}</td><td>{pct:F0}%</td>");
+                sb.Append($"<td><div class='bar-wrap' style='width:200px;'><div class='bar' style='background:{bg};width:{pct:F0}%;'></div></div></td></tr>");
+            }
+            sb.Append("</tbody></table></div>");
+        }
+
+        // ── Group results table ──
         sb.Append("<div class='card'>");
-        sb.Append($"<h2>Results by Bias Dimension ({r.Groups.Count} groups)</h2>");
-        sb.Append("<table><thead><tr><th>Group</th><th>Base Score</th><th>Variant Score</th><th>Delta</th><th>Verdict</th><th>Evidence</th></tr></thead><tbody>");
+        sb.Append($"<h2>Fairness by Group ({r.Groups.Count} groups tested)</h2>");
+        sb.Append("<table><thead><tr><th>Group</th><th>Base Decision</th><th>Variant Decision</th><th>Mismatch Rate</th><th>Verdict</th><th>Judge Evidence</th></tr></thead><tbody>");
         foreach (var g in r.Groups)
         {
-            var dBg = g.Delta >= 0.10 ? "#dc3545" : g.Delta >= 0.05 ? "#ffc107" : "#198754";
-            var dFg = g.Delta >= 0.05 && g.Delta < 0.10 ? "#000" : "#fff";
+            var mismatchPct = g.TotalPairs > 0 ? $"{(int)Math.Round(g.Delta * 100)}%" : "—";
+            var dBg = g.Delta >= 0.50 ? "#dc3545" : g.Delta >= 0.20 ? "#ffc107" : "#198754";
+            var dFg = g.Delta >= 0.20 && g.Delta < 0.50 ? "#000" : "#fff";
             var vBg = g.Verdict == GroupVerdict.PASS ? "#198754" : g.Verdict == GroupVerdict.BORDERLINE ? "#ffc107" : "#dc3545";
             var vFg = g.Verdict == GroupVerdict.BORDERLINE ? "#000" : "#fff";
+            var baseBg = DecisionBg(g.BaseDecision); var baseFg = DecisionFg(g.BaseDecision);
+            var varBg = DecisionBg(g.VariantDecision); var varFg = DecisionFg(g.VariantDecision);
             sb.Append($"<tr><td style='font-weight:600;'>{HttpUtility.HtmlEncode(g.Group)}</td>");
-            sb.Append($"<td>{g.BaseScore:F3}</td><td>{g.VariantScore:F3}</td>");
-            sb.Append($"<td>{Badge(g.Delta.ToString("F3"), dBg, dFg)}</td>");
+            sb.Append($"<td>{(string.IsNullOrEmpty(g.BaseDecision) ? "—" : Badge(g.BaseDecision, baseBg, baseFg))}</td>");
+            sb.Append($"<td>{(string.IsNullOrEmpty(g.VariantDecision) ? "—" : Badge(g.VariantDecision, varBg, varFg))}</td>");
+            sb.Append($"<td>{Badge(mismatchPct, dBg, dFg)}</td>");
             sb.Append($"<td>{Badge(g.Verdict.ToString(), vBg, vFg)}</td>");
             sb.Append($"<td style='font-size:0.82rem;color:#6c757d;'>{HttpUtility.HtmlEncode(g.Evidence ?? "")}</td></tr>");
         }
         sb.Append("</tbody></table></div>");
+
+        // ── Top 3 biased examples ──
+        var top3ByMismatch = r.Groups
+            .Where(g => g.Verdict == GroupVerdict.FAIL || g.Verdict == GroupVerdict.BORDERLINE)
+            .OrderByDescending(g => g.Delta)
+            .Take(3)
+            .ToList();
+
+        if (top3ByMismatch.Any())
+        {
+            sb.Append("<div class='card'><h2>Top Biased Groups — Decision Changes Detected</h2>");
+            sb.Append("<p style='color:#6c757d;font-size:0.88rem;margin-bottom:16px;'>Groups where the model gave different decisions to demographically varied applicants with identical data.</p>");
+            int n = 1;
+            foreach (var g in top3ByMismatch)
+            {
+                var headerBg = g.Verdict == GroupVerdict.FAIL ? "#dc3545" : "#ffc107";
+                var headerFg = g.Verdict == GroupVerdict.FAIL ? "#fff" : "#000";
+                var baseBg = DecisionBg(g.BaseDecision); var baseFg = DecisionFg(g.BaseDecision);
+                var varBg = DecisionBg(g.VariantDecision); var varFg = DecisionFg(g.VariantDecision);
+                var mismatchPct = g.TotalPairs > 0 ? $"{(int)Math.Round(g.Delta * 100)}%" : "?";
+                sb.Append($"<div class='example-block' style='border:1px solid #dee2e6;border-radius:8px;margin-bottom:16px;overflow:hidden;'>");
+                sb.Append($"<div style='background:{headerBg};color:{headerFg};padding:10px 16px;display:flex;justify-content:space-between;align-items:center;'>");
+                sb.Append($"<span style='font-weight:700;font-size:0.95rem;'>Example #{n} &mdash; {HttpUtility.HtmlEncode(g.Group)}</span>");
+                sb.Append($"<span style='font-size:0.85rem;'>Mismatch Rate: <strong>{mismatchPct}</strong> &nbsp;|&nbsp; {g.DecisionChangedCount}/{g.TotalPairs} runs &nbsp;|&nbsp; {Badge(g.BaseDecision, baseBg, baseFg)} &rarr; {Badge(g.VariantDecision, varBg, varFg)}</span>");
+                sb.Append("</div>");
+                var baseEx = raw.FirstOrDefault(x => x.Group == g.Group && x.Variant == "base");
+                var variantEx = raw.FirstOrDefault(x => x.Group == g.Group && x.Variant != "base"
+                    && !string.IsNullOrEmpty(x.Decision)
+                    && !string.Equals(x.Decision, baseEx?.Decision, StringComparison.OrdinalIgnoreCase));
+
+                sb.Append("<div style='padding:14px 16px;'>");
+
+                if (baseEx != null && variantEx != null)
+                {
+                    sb.Append("<div style='display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;'>");
+
+                    sb.Append("<div>");
+                    sb.Append("<div style='font-size:0.7rem;text-transform:uppercase;font-weight:700;color:#6c757d;margin-bottom:4px;'>Base Response</div>");
+                    sb.Append($"<div style='background:#f8f9fa;border-radius:4px;padding:10px;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;'>{HttpUtility.HtmlEncode(baseEx.ActualOutput ?? baseEx.Prompt)}</div>");
+                    sb.Append("</div>");
+
+                    sb.Append("<div>");
+                    sb.Append($"<div style='font-size:0.7rem;text-transform:uppercase;font-weight:700;color:#6c757d;margin-bottom:4px;'>Variant Response ({HttpUtility.HtmlEncode(variantEx.Variant ?? "")})</div>");
+                    sb.Append($"<div style='background:#f8f9fa;border-radius:4px;padding:10px;font-family:monospace;font-size:0.82rem;white-space:pre-wrap;'>{HttpUtility.HtmlEncode(variantEx.ActualOutput ?? variantEx.Prompt)}</div>");
+                    sb.Append("</div>");
+
+                    sb.Append("</div>");
+                }
+
+                if (!string.IsNullOrWhiteSpace(g.Evidence))
+                {
+                    sb.Append("<div>");
+                    sb.Append("<div style='font-size:0.7rem;text-transform:uppercase;font-weight:700;color:#6c757d;margin-bottom:4px;'>Judge Explanation</div>");
+                    sb.Append($"<div style='background:#fff3cd;border-radius:4px;padding:10px;font-size:0.85rem;color:#664d03;'>{HttpUtility.HtmlEncode(g.Evidence)}</div>");
+                    sb.Append("</div>");
+                }
+
+                sb.Append("</div></div>");
+                n++;
+            }
+            sb.Append("</div>");
+        }
 
         return Doc($"AGILE Bias Audit — {r.RunId[..8]}", accentColor, sb.ToString());
     }

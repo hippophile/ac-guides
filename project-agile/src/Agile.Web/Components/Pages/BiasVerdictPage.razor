@@ -106,9 +106,10 @@
                         <thead class="table-light">
                             <tr>
                                 <th class="ps-3">Group</th>
-                                <th>Base Score</th>
-                                <th>Variant Score</th>
-                                <th>Delta</th>
+                                <th>Base Decision</th>
+                                <th>Variant Decision</th>
+                                <th>Mismatch Rate</th>
+                                <th>Bias Frequency</th>
                                 <th>Verdict</th>
                                 <th>Evidence</th>
                             </tr>
@@ -129,19 +130,141 @@
                                         <i class="bi @(isExpanded ? "bi-chevron-down" : "bi-chevron-right") me-2 text-primary"></i>
                                         @g.Group
                                     </td>
-                                    <td>@g.BaseScore.ToString("F2")</td>
-                                    <td>@g.VariantScore.ToString("F2")</td>
                                     <td>
-                                        <span class="@DeltaBadgeClass(g.Delta)">@g.Delta.ToString("F3")</span>
+                                        @if (!string.IsNullOrEmpty(g.BaseDecision))
+                                        {
+                                            <span class="badge @DecisionClass(g.BaseDecision)">@g.BaseDecision</span>
+                                        }
+                                        else { <span class="text-muted small">—</span> }
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(g.VariantDecision))
+                                        {
+                                            <span class="badge @DecisionClass(g.VariantDecision)">@g.VariantDecision</span>
+                                        }
+                                        else { <span class="text-muted small">—</span> }
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(g.MismatchRateDisplay))
+                                        {
+                                            <span class="@DeltaBadgeClass(g.Delta)">@g.MismatchRateDisplay</span>
+                                        }
+                                        else { <span class="text-muted small">—</span> }
+                                    </td>
+                                    <td>
+                                        @if (!string.IsNullOrEmpty(g.BiasFrequency))
+                                        {
+                                            var freqClass = g.BiasedRunCount * 1.0 / g.TotalRunCount >= 0.7 ? "badge bg-danger"
+                                                : g.BiasedRunCount * 1.0 / g.TotalRunCount >= 0.4 ? "badge bg-warning text-dark"
+                                                : "badge bg-success";
+                                            <span class="@freqClass">@g.BiasFrequency</span>
+                                        }
+                                        else { <span class="text-muted small">—</span> }
                                     </td>
                                     <td>@VerdictBadge(g.Verdict)</td>
                                     <td class="small text-muted">@g.Evidence</td>
                                 </tr>
                                 @if (isExpanded && groupCases.Any())
                                 {
+                                    var baseRuns = groupCases.Where(c => c.Variant == "base").ToList();
+                                    var variantNames = groupCases.Where(c => c.Variant != "base").Select(c => c.Variant).Distinct().OrderBy(v => v).ToList();
                                     <tr class="bg-light">
-                                        <td colspan="6" class="p-3">
-                                            <div class="row g-3">
+                                        <td colspan="7" class="p-3">
+                                            @if (!string.IsNullOrWhiteSpace(g.Evidence))
+                                            {
+                                                var bannerClass = g.Verdict == GroupVerdict.FAIL ? "alert-danger" : "alert-warning";
+                                                <div class="alert @bannerClass border-0 mb-3 py-2 px-3 small">
+                                                    <i class="bi bi-chat-quote me-1"></i><strong>Judge:</strong> @g.Evidence
+                                                </div>
+                                            }
+                                            @foreach (var variantName in variantNames)
+                                            {
+                                                var vRuns = groupCases.Where(c => c.Variant == variantName).ToList();
+                                                var pairCount = Math.Min(baseRuns.Count, vRuns.Count);
+                                                var mismatches = Enumerable.Range(0, pairCount).Count(i =>
+                                                    !string.IsNullOrEmpty(baseRuns[i].Decision) &&
+                                                    !string.IsNullOrEmpty(vRuns[i].Decision) &&
+                                                    !string.Equals(baseRuns[i].Decision, vRuns[i].Decision, StringComparison.OrdinalIgnoreCase));
+                                                var isMismatch = mismatches > 0;
+                                                var rowBorder = isMismatch
+                                                    ? (g.Verdict == GroupVerdict.FAIL ? "border-danger" : "border-warning")
+                                                    : "border-success";
+                                                var runKey = $"{g.Group}:{variantName}";
+                                                var idx = selectedRunIndex.GetValueOrDefault(runKey, 0);
+                                                var bRun = baseRuns[idx];
+                                                var vRun = vRuns[idx];
+
+                                                <div class="card border @rowBorder border-2 mb-3">
+                                                    <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            <span class="fw-bold small text-uppercase">@variantName</span>
+                                                            <div class="d-flex align-items-center gap-1">
+                                                                <button class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:0.75rem;line-height:1.4;"
+                                                                    disabled="@(idx == 0)"
+                                                                    @onclick="() => PrevRun(runKey, pairCount)" @onclick:stopPropagation="true">&#8592;</button>
+                                                                <span class="small text-muted" style="white-space:nowrap;">Run @(idx+1)/@pairCount</span>
+                                                                <button class="btn btn-outline-secondary btn-sm py-0 px-1" style="font-size:0.75rem;line-height:1.4;"
+                                                                    disabled="@(idx >= pairCount - 1)"
+                                                                    @onclick="() => NextRun(runKey, pairCount)" @onclick:stopPropagation="true">&#8594;</button>
+                                                            </div>
+                                                        </div>
+                                                        @if (isMismatch)
+                                                        {
+                                                            <span class="badge bg-danger">@mismatches/@pairCount runs changed</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-success">No change (@pairCount runs)</span>
+                                                        }
+                                                    </div>
+                                                    <div class="card-body p-2">
+                                                        <div class="row g-2">
+                                                            <!-- Base side -->
+                                                            <div class="col-md-5">
+                                                                <div class="p-2 rounded border-start border-primary border-3 bg-white h-100">
+                                                                    <div class="text-muted fw-bold mb-1" style="font-size:0.68rem;text-transform:uppercase;">Base (neutral)</div>
+                                                                    @if (!string.IsNullOrEmpty(bRun.Decision))
+                                                                    {
+                                                                        <div class="mb-2"><span class="badge @DecisionClass(bRun.Decision)">@bRun.Decision</span></div>
+                                                                    }
+                                                                    @if (!string.IsNullOrEmpty(bRun.Prompt))
+                                                                    {
+                                                                        <div class="text-muted fw-bold mb-1" style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;">Prompt</div>
+                                                                        <div class="font-monospace text-muted bg-light p-1 rounded mb-2" style="font-size:0.72rem;white-space:pre-wrap;">@bRun.Prompt</div>
+                                                                    }
+                                                                    <div class="text-muted fw-bold mb-1" style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;">Response</div>
+                                                                    <div class="font-monospace text-muted" style="font-size:0.75rem;white-space:pre-wrap;">@bRun.ActualOutput</div>
+                                                                </div>
+                                                            </div>
+                                                            <!-- Arrow -->
+                                                            <div class="col-md-2 d-flex align-items-center justify-content-center">
+                                                                <i class="bi bi-arrow-right fs-4 @(isMismatch ? "text-danger" : "text-success")"></i>
+                                                            </div>
+                                                            <!-- Variant side -->
+                                                            <div class="col-md-5">
+                                                                <div class="p-2 rounded border-start @(isMismatch ? "border-danger" : "border-success") border-3 bg-white h-100">
+                                                                    <div class="text-muted fw-bold mb-1" style="font-size:0.68rem;text-transform:uppercase;">@variantName</div>
+                                                                    @if (!string.IsNullOrEmpty(vRun.Decision))
+                                                                    {
+                                                                        <div class="mb-2"><span class="badge @DecisionClass(vRun.Decision)">@vRun.Decision</span></div>
+                                                                    }
+                                                                    @if (!string.IsNullOrEmpty(vRun.Prompt))
+                                                                    {
+                                                                        <div class="text-muted fw-bold mb-1" style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;">Prompt</div>
+                                                                        <div class="font-monospace text-muted bg-light p-1 rounded mb-2" style="font-size:0.72rem;white-space:pre-wrap;">@vRun.Prompt</div>
+                                                                    }
+                                                                    <div class="text-muted fw-bold mb-1" style="font-size:0.65rem;text-transform:uppercase;letter-spacing:0.05em;">Response</div>
+                                                                    <div class="font-monospace text-muted" style="font-size:0.75rem;white-space:pre-wrap;">@vRun.ActualOutput</div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            }
+                                            @if (!variantNames.Any())
+                                            {
+                                                <!-- fallback: show flat cards -->
+                                                <div class="row g-3">
                                                 @foreach (var c in groupCases)
                                                 {
                                                     var isBase = c.Variant == "base";
@@ -157,29 +280,26 @@
                                                                 }
                                                             </div>
                                                             <div class="card-body py-2 small">
-                                                                <div class="text-muted fw-bold text-uppercase mb-1" style="font-size:0.7rem;">Prompt Sent</div>
-                                                                <div class="bg-light p-2 rounded font-monospace mb-2" style="white-space:pre-wrap;max-height:100px;overflow-y:auto;font-size:0.78rem;">@c.Prompt</div>
-                                                                <div class="text-muted fw-bold text-uppercase mb-1" style="font-size:0.7rem;">AI Response</div>
-                                                                <div class="bg-white border p-2 rounded font-monospace" style="white-space:pre-wrap;max-height:150px;overflow-y:auto;font-size:0.78rem;">
+                                                                <div class="bg-white border p-2 rounded font-monospace" style="white-space:pre-wrap;font-size:0.78rem;">
                                                                     @(c.Error != null ? "ERROR: " + c.Error : c.ActualOutput)
                                                                 </div>
                                                                 @if (!string.IsNullOrWhiteSpace(c.JudgeReasoning))
                                                                 {
-                                                                    <div class="text-muted fw-bold text-uppercase mt-2 mb-1" style="font-size:0.7rem;">Judge Reasoning</div>
-                                                                    <div class="bg-light p-2 rounded text-secondary" style="white-space:pre-wrap;max-height:80px;overflow-y:auto;font-size:0.78rem;">@c.JudgeReasoning</div>
+                                                                    <div class="bg-light p-2 rounded text-secondary" style="white-space:pre-wrap;font-size:0.78rem;">@c.JudgeReasoning</div>
                                                                 }
                                                             </div>
                                                         </div>
                                                     </div>
                                                 }
-                                            </div>
+                                                </div>
+                                            }
                                         </td>
                                     </tr>
                                 }
                                 else if (isExpanded && !groupCases.Any())
                                 {
                                     <tr class="bg-light">
-                                        <td colspan="6" class="text-muted small p-3">
+                                        <td colspan="7" class="text-muted small p-3">
                                             <i class="bi bi-info-circle me-1"></i>
                                             Raw outputs not available for this report (run a new evaluation to capture outputs).
                                         </td>
@@ -204,11 +324,29 @@
     private List<BiasVerdictReport> allReports = new();
     private BiasVerdictReport? currentReport;
     private HashSet<string> expandedGroups = new();
+    private Dictionary<string, int> selectedRunIndex = new();
 
     private void ToggleGroup(string group)
     {
-        if (expandedGroups.Contains(group)) expandedGroups.Remove(group);
+        if (expandedGroups.Contains(group))
+        {
+            expandedGroups.Remove(group);
+            foreach (var k in selectedRunIndex.Keys.Where(k => k.StartsWith(group + ":")).ToList())
+                selectedRunIndex.Remove(k);
+        }
         else expandedGroups.Add(group);
+    }
+
+    private void PrevRun(string key, int max)
+    {
+        var cur = selectedRunIndex.GetValueOrDefault(key, 0);
+        if (cur > 0) selectedRunIndex[key] = cur - 1;
+    }
+
+    private void NextRun(string key, int max)
+    {
+        var cur = selectedRunIndex.GetValueOrDefault(key, 0);
+        if (cur < max - 1) selectedRunIndex[key] = cur + 1;
     }
 
     private static string DecisionClass(string? d) => d?.ToLower() switch
@@ -245,7 +383,7 @@
         if (currentReport == null) return;
         var html = ReportHtmlExporter.GenerateBiasVerdictReport(currentReport);
         var filename = $"agile-bias-audit-{currentReport.RunId[..8]}-{DateTime.Now:yyyy-MM-dd}.html";
-        await JS.InvokeVoidAsync("downloadFile", filename, html);
+        await JS.InvokeVoidAsync("printAsPdf", html);
     }
 
     private void DeleteReport(string runId)
@@ -294,7 +432,7 @@
         _ => "alert-secondary"
     };
 
-    private string DeltaBadgeClass(double delta) => delta >= 0.10
+    private string DeltaBadgeClass(double delta) => delta >= 0.50
         ? "badge bg-danger"
-        : delta >= 0.05 ? "badge bg-warning text-dark" : "badge bg-success";
+        : delta >= 0.20 ? "badge bg-warning text-dark" : "badge bg-success";
 }
