@@ -1,6 +1,7 @@
 @page "/use-cases"
 @rendermode InteractiveServer
 @using System.IO
+@using System.Text.Json
 @using Microsoft.AspNetCore.Components.Forms
 @using Agile.Core.Datasets
 @using YamlDotNet.Serialization
@@ -22,10 +23,10 @@
                 <div class="card-header bg-white py-3 border-bottom d-flex justify-content-between align-items-center">
                     <h6 class="mb-0 fw-bold">Datasets</h6>
                     <div class="d-flex gap-1">
-                        <button class="btn btn-sm btn-outline-primary" @onclick="CreateBlankDataset" title="Create Blank">
+                        <button class="btn btn-sm btn-outline-primary" @onclick="CreateBlankDataset" title="Create Blank YAML">
                             <i class="bi bi-file-earmark-plus"></i> New
                         </button>
-                        <label class="btn btn-sm btn-outline-secondary mb-0" title="Upload YAML">
+                        <label class="btn btn-sm btn-outline-secondary mb-0" title="Upload YAML or JSONL">
                             <i class="bi bi-upload"></i>
                             <InputFile OnChange="UploadDataset" style="display:none" />
                         </label>
@@ -35,8 +36,17 @@
                     @foreach (var file in availableFiles)
                     {
                         var fileName = Path.GetFileName(file);
+                        var isJsonl = fileName.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase);
                         <button type="button" class="list-group-item list-group-item-action @(selectedFile == file ? "active fw-bold" : "")" @onclick="() => LoadFile(file)">
-                            <i class="bi bi-filetype-yml me-2"></i> @fileName
+                            @if (isJsonl)
+                            {
+                                <span class="badge bg-info text-dark me-1" style="font-size:0.65rem;">JSONL</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-filetype-yml me-2"></i>
+                            }
+                            @fileName
                         </button>
                     }
                     @if (!availableFiles.Any())
@@ -53,8 +63,15 @@
                         @if (selectedFile != null)
                         {
                             <div class="d-flex align-items-center">
-                                <span class="me-2">Editing:</span>
-                                <input type="text" class="form-control form-control-sm font-monospace text-primary fw-bold border-0 bg-light" style="width: 350px;" value="@Path.GetFileName(selectedFile)" @onchange="RenameDataset" title="Edit filename" />
+                                <span class="me-2">@(isJsonlFile ? "Viewing:" : "Editing:")</span>
+                                @if (isJsonlFile)
+                                {
+                                    <span class="font-monospace text-primary fw-bold">@Path.GetFileName(selectedFile)</span>
+                                }
+                                else
+                                {
+                                    <input type="text" class="form-control form-control-sm font-monospace text-primary fw-bold border-0 bg-light" style="width: 350px;" value="@Path.GetFileName(selectedFile)" @onchange="RenameDataset" title="Edit filename" />
+                                }
                             </div>
                         }
                         else
@@ -66,22 +83,92 @@
                         <button class="btn btn-sm btn-danger fw-bold me-2" @onclick="DeleteDataset" disabled="@(selectedFile == null)">
                             <i class="bi bi-trash me-1"></i> Delete
                         </button>
-                        <button class="btn btn-sm btn-success fw-bold" @onclick="SaveFile" disabled="@(selectedFile == null || isSaving)">
-                            @if (isSaving)
-                            {
-                                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                                <span>Saving...</span>
-                            }
-                            else
-                            {
-                                <i class="bi bi-floppy-fill me-1"></i> <span>Save Changes</span>
-                            }
-                        </button>
+                        @if (!isJsonlFile)
+                        {
+                            <button class="btn btn-sm btn-success fw-bold" @onclick="SaveFile" disabled="@(selectedFile == null || isSaving)">
+                                @if (isSaving)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                    <span>Saving...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-floppy-fill me-1"></i> <span>Save Changes</span>
+                                }
+                            </button>
+                        }
                     </div>
                 </div>
                 <div class="card-body bg-light overflow-auto" style="height: 600px;">
-                    @if (currentDataset != null)
+
+                    @if (isJsonlFile && jsonlCases.Any())
                     {
+                        <!-- JSONL read-only view -->
+                        <div class="alert alert-info border-0 py-2 mb-3 small">
+                            <i class="bi bi-info-circle me-1"></i> JSONL datasets are read-only. <strong>@jsonlCases.Count cases</strong> across <strong>@jsonlCases.Select(c => c.Group).Distinct().Count() dimensions</strong>.
+                        </div>
+
+                        <!-- Dimension summary pills -->
+                        <div class="mb-3 d-flex flex-wrap gap-2">
+                            @foreach (var grp in jsonlCases.GroupBy(c => c.Group).OrderBy(g => g.Key))
+                            {
+                                <span class="badge rounded-pill bg-primary-subtle text-primary border border-primary" style="font-size:0.8rem; padding:0.4em 0.8em;">
+                                    @grp.Key <span class="ms-1 text-muted">(@grp.Count())</span>
+                                </span>
+                            }
+                        </div>
+
+                        <!-- Cases grouped by dimension -->
+                        @foreach (var grp in jsonlCases.GroupBy(c => c.Group).OrderBy(g => g.Key))
+                        {
+                            <div class="card mb-3 border-0 shadow-sm">
+                                <div class="card-header bg-white py-2 d-flex align-items-center border-bottom" style="cursor:pointer;" @onclick="() => ToggleGroup(grp.Key)">
+                                    <i class="bi @(expandedGroups.Contains(grp.Key) ? "bi-chevron-down" : "bi-chevron-right") me-2 text-muted"></i>
+                                    <span class="fw-bold text-uppercase text-primary small me-2">@grp.Key</span>
+                                    <span class="badge bg-light text-dark border">@grp.Count() cases</span>
+                                </div>
+                                @if (expandedGroups.Contains(grp.Key))
+                                {
+                                    <div class="card-body p-0">
+                                        <table class="table table-sm table-hover mb-0 align-middle">
+                                            <thead class="table-light">
+                                                <tr>
+                                                    <th class="ps-3" style="width:100px;">ID</th>
+                                                    <th style="width:130px;">Variant</th>
+                                                    <th>Prompt</th>
+                                                    <th style="width:200px;">Notes</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var c in grp)
+                                                {
+                                                    <tr style="cursor:pointer;" @onclick="() => ToggleCase(c.Id)">
+                                                        <td class="ps-3 font-monospace small text-muted">@c.Id</td>
+                                                        <td><span class="badge bg-secondary">@c.Variant</span></td>
+                                                        <td class="small text-truncate" style="max-width:350px;" title="@c.Prompt">
+                                                            @(c.Prompt.Length > 120 ? c.Prompt[..120] + "…" : c.Prompt)
+                                                        </td>
+                                                        <td class="small text-muted">@c.EvaluationNotes</td>
+                                                    </tr>
+                                                    @if (expandedCaseIds.Contains(c.Id))
+                                                    {
+                                                        <tr class="bg-light">
+                                                            <td colspan="4" class="p-3">
+                                                                <div class="font-monospace small p-3 bg-white border rounded" style="white-space:pre-wrap;">@c.Prompt</div>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                }
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                    else if (currentDataset != null)
+                    {
+                        <!-- YAML editor view -->
                         <div class="mb-4 bg-white p-3 rounded shadow-sm border">
                             <h5 class="fw-bold mb-3 text-secondary border-bottom pb-2"><i class="bi bi-info-circle me-2"></i> Dataset Metadata</h5>
                             <div class="row">
@@ -103,7 +190,7 @@
                             <h5 class="fw-bold mb-0 text-primary"><i class="bi bi-list-check me-2"></i> Test Cases (@currentDataset.TestCases.Count)</h5>
                             <button class="btn btn-sm btn-outline-primary" @onclick="AddTestCase"><i class="bi bi-plus-circle"></i> Add Test Case</button>
                         </div>
-                        
+
                         @foreach (var tc in currentDataset.TestCases)
                         {
                             <div class="card mb-4 shadow-sm border-0">
@@ -115,7 +202,7 @@
                                     </h6>
                                     <span class="badge bg-light text-dark border">@tc.Difficulty</span>
                                 </div>
-                                
+
                                 @if (expandedCases.Contains(tc.Id))
                                 {
                                     <div class="card-body">
@@ -133,7 +220,7 @@
                                                 <input type="text" class="form-control" @bind="tc.Difficulty" />
                                             </div>
                                         </div>
-                                        
+
                                         @if(tc.BiasVariants.Any())
                                         {
                                             <div class="mt-4 border-top pt-3">
@@ -179,8 +266,14 @@
 </div>
 
 @code {
+    private record JsonlCase(string Id, string Group, string Variant, string Category, string Prompt, string EvaluationNotes);
+
     private List<string> availableFiles = new();
     private string? selectedFile;
+    private bool isJsonlFile;
+    private List<JsonlCase> jsonlCases = new();
+    private HashSet<string> expandedGroups = new();
+    private HashSet<string> expandedCaseIds = new();
     private YamlDataset? currentDataset;
     private bool isSaving = false;
     private string? saveMessage;
@@ -200,7 +293,6 @@
     {
         var current = new DirectoryInfo(Environment.CurrentDirectory);
         DirectoryInfo? projectRoot = null;
-        
         while (current != null)
         {
             if (Directory.Exists(Path.Combine(current.FullName, "datasets", "golden")))
@@ -214,11 +306,12 @@
         if (projectRoot != null)
         {
             var datasetsDir = Path.Combine(projectRoot.FullName, "datasets", "golden");
-            availableFiles = Directory.GetFiles(datasetsDir, "*.yaml").ToList();
+            availableFiles = Directory.GetFiles(datasetsDir, "*.yaml")
+                .Concat(Directory.GetFiles(datasetsDir, "*.jsonl"))
+                .OrderBy(f => Path.GetFileName(f))
+                .ToList();
             if (availableFiles.Any())
-            {
                 LoadFile(availableFiles.First());
-            }
         }
     }
 
@@ -227,45 +320,86 @@
         selectedFile = path;
         saveMessage = null;
         expandedCases.Clear();
-        try
+        expandedCaseIds.Clear();
+        currentDataset = null;
+        jsonlCases.Clear();
+        isJsonlFile = path.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase);
+
+        if (isJsonlFile)
         {
-            var yaml = File.ReadAllText(path);
-            currentDataset = Deserializer.Deserialize<YamlDataset>(yaml);
-            
-            // Expand the first case by default
-            if (currentDataset?.TestCases.Any() == true)
+            try
             {
-                expandedCases.Add(currentDataset.TestCases.First().Id);
+                var opts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                jsonlCases = File.ReadAllLines(path)
+                    .Where(l => !string.IsNullOrWhiteSpace(l))
+                    .Select(line =>
+                    {
+                        var doc = JsonSerializer.Deserialize<JsonElement>(line);
+                        return new JsonlCase(
+                            doc.TryGetProperty("id", out var id) ? id.GetString() ?? "" : "",
+                            doc.TryGetProperty("group", out var grp) ? grp.GetString() ?? "" : "",
+                            doc.TryGetProperty("variant", out var v) ? v.GetString() ?? "" : "",
+                            doc.TryGetProperty("category", out var cat) ? cat.GetString() ?? "" : "",
+                            doc.TryGetProperty("prompt", out var p) ? p.GetString() ?? "" : "",
+                            doc.TryGetProperty("evaluation_notes", out var n) ? n.GetString() ?? "" : ""
+                        );
+                    })
+                    .ToList();
+                // Expand first group by default
+                var firstGroup = jsonlCases.Select(c => c.Group).FirstOrDefault();
+                if (firstGroup != null) expandedGroups.Add(firstGroup);
+            }
+            catch (Exception ex)
+            {
+                saveMessage = "Error parsing JSONL: " + ex.Message;
             }
         }
-        catch (Exception ex)
+        else
         {
-            saveMessage = $"Error parsing YAML: {ex.Message}";
-            currentDataset = null;
+            try
+            {
+                var yaml = File.ReadAllText(path);
+                currentDataset = Deserializer.Deserialize<YamlDataset>(yaml);
+                if (currentDataset?.TestCases.Any() == true)
+                    expandedCases.Add(currentDataset.TestCases.First().Id);
+            }
+            catch (Exception ex)
+            {
+                saveMessage = "Error parsing YAML: " + ex.Message;
+            }
         }
+    }
+
+    private void ToggleGroup(string group)
+    {
+        if (expandedGroups.Contains(group)) expandedGroups.Remove(group);
+        else expandedGroups.Add(group);
+    }
+
+    private void ToggleCase(string id)
+    {
+        if (expandedCaseIds.Contains(id)) expandedCaseIds.Remove(id);
+        else expandedCaseIds.Add(id);
     }
 
     private void ToggleExpanded(string id)
     {
-        if (expandedCases.Contains(id))
-            expandedCases.Remove(id);
-        else
-            expandedCases.Add(id);
+        if (expandedCases.Contains(id)) expandedCases.Remove(id);
+        else expandedCases.Add(id);
     }
 
     private void AddTestCase()
     {
         if (currentDataset == null) return;
         var newId = $"TC{(currentDataset.TestCases.Count + 1).ToString("D3")}";
-        var newTc = new YamlTestCase
+        currentDataset.TestCases.Add(new YamlTestCase
         {
             Id = newId,
             Category = "new-category",
             Difficulty = "easy",
             Prompt = "Enter the prompt here...",
-            GroundTruth = "" // User doesn't need to specify it immediately
-        };
-        currentDataset.TestCases.Add(newTc);
+            GroundTruth = ""
+        });
         expandedCases.Add(newId);
     }
 
@@ -278,74 +412,48 @@
             availableFiles.Remove(selectedFile);
             selectedFile = null;
             currentDataset = null;
+            jsonlCases.Clear();
+            isJsonlFile = false;
             if (availableFiles.Any())
-            {
                 LoadFile(availableFiles.First());
-            }
         }
     }
 
     private void RenameDataset(ChangeEventArgs e)
     {
-        if (selectedFile == null) return;
+        if (selectedFile == null || isJsonlFile) return;
         var newName = e.Value?.ToString();
         if (string.IsNullOrWhiteSpace(newName)) return;
-        
         if (!newName.EndsWith(".yaml")) newName += ".yaml";
-        
         var dir = Path.GetDirectoryName(selectedFile);
         if (dir == null) return;
-        
         var newPath = Path.Combine(dir, newName);
         if (newPath == selectedFile) return;
-        
-        if (File.Exists(newPath))
-        {
-            saveMessage = "A dataset with that name already exists.";
-            return;
-        }
-        
+        if (File.Exists(newPath)) { saveMessage = "A dataset with that name already exists."; return; }
         try
         {
             File.Move(selectedFile, newPath);
             var index = availableFiles.IndexOf(selectedFile);
             if (index >= 0) availableFiles[index] = newPath;
-            
             selectedFile = newPath;
             saveMessage = "Dataset renamed to " + newName;
         }
-        catch (Exception ex)
-        {
-            saveMessage = "Error renaming: " + ex.Message;
-        }
+        catch (Exception ex) { saveMessage = "Error renaming: " + ex.Message; }
     }
 
     private void CreateBlankDataset()
     {
-        var currentDir = new DirectoryInfo(Environment.CurrentDirectory);
+        var current = new DirectoryInfo(Environment.CurrentDirectory);
         DirectoryInfo? projectRoot = null;
-        while (currentDir != null)
+        while (current != null)
         {
-            if (Directory.Exists(Path.Combine(currentDir.FullName, "datasets", "golden")))
-            {
-                projectRoot = currentDir;
-                break;
-            }
-            currentDir = currentDir.Parent;
+            if (Directory.Exists(Path.Combine(current.FullName, "datasets", "golden"))) { projectRoot = current; break; }
+            current = current.Parent;
         }
-
-        var root = projectRoot?.FullName ?? Environment.CurrentDirectory;
-        var datasetsDir = Path.Combine(root, "datasets", "golden");
-        
+        var datasetsDir = Path.Combine(projectRoot?.FullName ?? Environment.CurrentDirectory, "datasets", "golden");
         var newFileName = Path.Combine(datasetsDir, $"new_dataset_{DateTime.Now.Ticks}.yaml");
-        var blank = new YamlDataset 
-        { 
-            Version = "1.0",
-            Metadata = new Dictionary<string, object> { { "description", "New Dataset" } }
-        };
-        var yaml = Serializer.Serialize(blank);
-        File.WriteAllText(newFileName, yaml);
-        
+        var blank = new YamlDataset { Version = "1.0", Metadata = new Dictionary<string, object> { { "description", "New Dataset" } } };
+        File.WriteAllText(newFileName, Serializer.Serialize(blank));
         availableFiles.Add(newFileName);
         LoadFile(newFileName);
     }
@@ -354,55 +462,33 @@
     {
         var file = e.File;
         if (file == null) return;
-
-        var currentDir = new DirectoryInfo(Environment.CurrentDirectory);
+        var current = new DirectoryInfo(Environment.CurrentDirectory);
         DirectoryInfo? projectRoot = null;
-        while (currentDir != null)
+        while (current != null)
         {
-            if (Directory.Exists(Path.Combine(currentDir.FullName, "datasets", "golden")))
-            {
-                projectRoot = currentDir;
-                break;
-            }
-            currentDir = currentDir.Parent;
+            if (Directory.Exists(Path.Combine(current.FullName, "datasets", "golden"))) { projectRoot = current; break; }
+            current = current.Parent;
         }
-
-        var root = projectRoot?.FullName ?? Environment.CurrentDirectory;
-        var datasetsDir = Path.Combine(root, "datasets", "golden");
-        
+        var datasetsDir = Path.Combine(projectRoot?.FullName ?? Environment.CurrentDirectory, "datasets", "golden");
         var targetPath = Path.Combine(datasetsDir, file.Name);
-        
-        using var stream = file.OpenReadStream(maxAllowedSize: 1048576); // 1MB max
+        using var stream = file.OpenReadStream(maxAllowedSize: 2097152);
         using var fs = File.Create(targetPath);
         await stream.CopyToAsync(fs);
-        
-        if (!availableFiles.Contains(targetPath))
-        {
-            availableFiles.Add(targetPath);
-        }
+        if (!availableFiles.Contains(targetPath)) availableFiles.Add(targetPath);
         LoadFile(targetPath);
     }
 
     private async Task SaveFile()
     {
         if (selectedFile == null || currentDataset == null) return;
-        
         isSaving = true;
         saveMessage = null;
-        
         try
         {
-            var yamlOut = Serializer.Serialize(currentDataset);
-            await File.WriteAllTextAsync(selectedFile, yamlOut);
+            await File.WriteAllTextAsync(selectedFile, Serializer.Serialize(currentDataset));
             saveMessage = "Dataset saved successfully at " + DateTime.Now.ToString("HH:mm:ss");
         }
-        catch (Exception ex)
-        {
-            saveMessage = $"Error saving: {ex.Message}";
-        }
-        finally
-        {
-            isSaving = false;
-        }
+        catch (Exception ex) { saveMessage = "Error saving: " + ex.Message; }
+        finally { isSaving = false; }
     }
 }

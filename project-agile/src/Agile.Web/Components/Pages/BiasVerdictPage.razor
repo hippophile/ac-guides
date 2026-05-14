@@ -3,8 +3,10 @@
 @rendermode InteractiveServer
 @using Agile.Core.Models
 @using Agile.Core.Reports
+@using Agile.Web.Services
 @using System.IO
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <PageTitle>Bias Audit | AGILE Platform</PageTitle>
 
@@ -70,7 +72,10 @@
         <!-- Detail View -->
         <div class="mb-3 d-flex justify-content-between align-items-center">
             <a href="/bias-verdict" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
-            <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteReport(currentReport.RunId)"><i class="bi bi-trash"></i> Delete Report</button>
+            <div class="d-flex gap-2">
+                <button class="btn btn-outline-success btn-sm" @onclick="ExportBiasReport"><i class="bi bi-download me-1"></i> Download Report</button>
+                <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteReport(currentReport.RunId)"><i class="bi bi-trash"></i> Delete Report</button>
+            </div>
         </div>
 
         <!-- Overall Verdict Banner -->
@@ -158,6 +163,14 @@
     }
 
     private void ViewReport(string runId) => NavigationManager.NavigateTo("/bias-verdict/" + runId);
+
+    private async Task ExportBiasReport()
+    {
+        if (currentReport == null) return;
+        var html = ReportHtmlExporter.GenerateBiasVerdictReport(currentReport);
+        var filename = $"agile-bias-audit-{currentReport.RunId[..8]}-{DateTime.Now:yyyy-MM-dd}.html";
+        await JS.InvokeVoidAsync("downloadFile", filename, html);
+    }
 
     private void DeleteReport(string runId)
     {

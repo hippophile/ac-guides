@@ -2,9 +2,11 @@
 @page "/reports/{RunId}"
 @rendermode InteractiveServer
 @using Agile.Core.Models
+@using Agile.Web.Services
 @using System.IO
 @using System.Text.Json
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <PageTitle>Reports | AGILE Platform</PageTitle>
 
@@ -67,7 +69,7 @@
                                     </div>
                                 </div>
                                 <div class="card-footer bg-light border-0 py-3 text-center">
-                                    <button class="btn btn-sm btn-link text-decoration-none text-muted"><i class="bi bi-file-earmark-pdf me-1"></i> Export as Compliance PDF (Draft)</button>
+                                    <button class="btn btn-sm btn-outline-success" @onclick="ExportReport"><i class="bi bi-download me-1"></i> Download Report</button>
                                 </div>
                             </div>
                         </div>
@@ -502,6 +504,14 @@
         {
             expandedRows.Add(testCaseId);
         }
+    }
+
+    private async Task ExportReport()
+    {
+        if (currentReport == null) return;
+        var html = ReportHtmlExporter.GenerateRunReport(currentReport);
+        var filename = $"agile-report-{currentReport.RunId[..8]}-{DateTime.Now:yyyy-MM-dd}.html";
+        await JS.InvokeVoidAsync("downloadFile", filename, html);
     }
 
     private void DeleteCurrentReport()
