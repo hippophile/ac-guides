@@ -35,7 +35,7 @@
                     @foreach (var file in availableFiles)
                     {
                         var fileName = Path.GetFileName(file);
-                        <button type="button" class="list-group-item list-group-item-action @(selectedFile == file ? "active fw-bold text-primary" : "")" @onclick="() => LoadFile(file)">
+                        <button type="button" class="list-group-item list-group-item-action @(selectedFile == file ? "active fw-bold" : "")" @onclick="() => LoadFile(file)">
                             <i class="bi bi-filetype-yml me-2"></i> @fileName
                         </button>
                     }
