@@ -38,17 +38,9 @@
                     <div class="mb-3">
                         <label class="form-label fw-bold">Model Endpoint</label>
                         <select class="form-select" @bind="selectedModel">
-                            <optgroup label="GitHub Models (Free Tier)">
-                                <option value="gpt-4o-mini">gpt-4o-mini</option>
-                                <option value="gpt-4o">gpt-4o</option>
-                                <option value="meta-llama-3.1-8b-instruct">meta-llama-3.1-8b-instruct</option>
-                                <option value="Mistral-small">Mistral-small</option>
-                            </optgroup>
                             <optgroup label="GitHub Copilot (via Subscription)">
                                 <option value="copilot:gpt-4.1">gpt-4.1 (Copilot Default)</option>
-                                <option value="copilot:gpt-5">gpt-5 (Copilot Next-Gen)</option>
-                                <option value="copilot:gpt-5.1">gpt-5.1 (Copilot Ultra)</option>
-                                <option value="copilot:claude-3.5-sonnet">claude-3.5-sonnet (Copilot)</option>
+                                <option value="copilot:gpt-4">gpt-4 (Copilot)</option>
                             </optgroup>
                         </select>
                     </div>
@@ -180,7 +172,7 @@
 @code {
     private List<string> availableDatasets = new();
     private string selectedDataset = "";
-    private string selectedModel = "gpt-4o-mini";
+    private string selectedModel = "copilot:gpt-4.1";
     private string selectedPromptId = "";
     
     private PlatformSettings settings = new();
@@ -189,7 +181,7 @@
     private string? errorMessage;
     private int currentTest = 0;
     private int totalTests = 0;
-    private int MaxConcurrency { get; set; } = 1;
+    private int MaxConcurrency { get; set; } = 4;
     private int Iterations { get; set; } = 4;
     private List<EvaluationResult> liveResults = new();
     private List<string> consoleLogs = new();

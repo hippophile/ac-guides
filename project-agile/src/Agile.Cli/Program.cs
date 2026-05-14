@@ -22,6 +22,9 @@ app.Configure(config =>
 
     config.AddCommand<ValidateCommand>("validate")
           .WithDescription("Validate a YAML dataset file against the golden dataset schema");
+
+    config.AddCommand<ValidateTokenCommand>("validate-token")
+          .WithDescription("Test the full GitHub token → API chain and report pass/fail for each step");
 });
 
 return app.Run(args);

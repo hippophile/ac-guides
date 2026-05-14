@@ -18,7 +18,7 @@ cli:
 eval:
 	dotnet run --project src/Agile.Cli -- run eval \
 		--dataset datasets/golden/chatbot-sample.yaml \
-		--model gpt-4o-mini \
+		--model copilot:gpt-4.1 \
 		--delay 500 \
 		--reports-dir reports \
 		--template templates/report.scriban.html

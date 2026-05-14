@@ -15,8 +15,8 @@ public class RunEvalSettings : CommandSettings
     public string Dataset { get; set; } = string.Empty;
 
     [CommandOption("--model <NAME>")]
-    [Description("Model ID to evaluate (e.g. gpt-4o-mini)")]
-    public string Model { get; set; } = "gpt-4o-mini";
+    [Description("Model ID to evaluate (e.g. copilot:gpt-4.1)")]
+    public string Model { get; set; } = "copilot:gpt-4.1";
 
     [CommandOption("--category <CAT>")]
     [Description("Filter by category (optional)")]

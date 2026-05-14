@@ -90,7 +90,7 @@ public class EvalRunner
                     retryCount++;
                     if (retryCount >= 3) throw;
                     
-                    var waitSec = retryCount * 30; // 30s, 60s
+                    var waitSec = retryCount * 5; // 5s, 10s
                     logger?.Report($"[RATE LIMIT] Hit limit. Waiting {waitSec}s before retry {retryCount}...");
                     await Task.Delay(TimeSpan.FromSeconds(waitSec), ct);
                 }

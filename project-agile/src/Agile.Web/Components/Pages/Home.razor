@@ -1,46 +1,66 @@
 @page "/"
+@using Agile.Core.Models
+@using Agile.Core.Reports
+@using System.IO
 
 <PageTitle>Dashboard | AGILE Platform</PageTitle>
 
 <div class="container-fluid py-4">
     <div class="row mb-4">
         <div class="col-12">
-            <h1 class="display-5 fw-bold text-primary mb-2">AGILE Test Platform</h1>
-            <p class="lead text-muted">AI Governance, Integration, and Lifecycle Evaluation</p>
+            <div class="d-flex align-items-center mb-2">
+                <div class="bg-primary p-2 rounded-3 me-3">
+                    <i class="bi bi-shield-check text-white fs-4"></i>
+                </div>
+                <h1 class="display-6 fw-bold text-dark mb-0">AGILE Test Platform</h1>
+            </div>
+            <p class="lead text-muted ps-1">AI Governance, Integration, and Lifecycle Evaluation</p>
         </div>
     </div>
 
     <div class="row g-4 mb-5">
         <!-- Summary Cards -->
         <div class="col-md-3">
-            <div class="card shadow-sm border-0 border-start border-primary border-4 h-100">
+            <div class="card shadow-sm border-0 border-top border-primary border-4 h-100">
                 <div class="card-body">
-                    <h6 class="text-muted text-uppercase fw-semibold mb-2">Active Use Cases</h6>
-                    <h2 class="display-6 mb-0">12</h2>
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h6 class="text-muted text-uppercase fw-semibold small mb-0">Total Evaluations</h6>
+                        <span class="badge bg-primary-soft text-primary"><i class="bi bi-activity"></i></span>
+                    </div>
+                    <h2 class="fw-bold mb-0">@recentReports.Count</h2>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card shadow-sm border-0 border-start border-success border-4 h-100">
+            <div class="card shadow-sm border-0 border-top border-success border-4 h-100">
                 <div class="card-body">
-                    <h6 class="text-muted text-uppercase fw-semibold mb-2">Tests Passed (30d)</h6>
-                    <h2 class="display-6 mb-0">1,402</h2>
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h6 class="text-muted text-uppercase fw-semibold small mb-0">Pass Rate</h6>
+                        <span class="badge bg-success-soft text-success"><i class="bi bi-check-circle"></i></span>
+                    </div>
+                    <h2 class="fw-bold mb-0">@(CalculatePassRate())%</h2>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card shadow-sm border-0 border-start border-danger border-4 h-100">
+            <div class="card shadow-sm border-0 border-top border-danger border-4 h-100">
                 <div class="card-body">
-                    <h6 class="text-muted text-uppercase fw-semibold mb-2">Critical Failures</h6>
-                    <h2 class="display-6 mb-0">3</h2>
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h6 class="text-muted text-uppercase fw-semibold small mb-0">Avg Bias Score</h6>
+                        <span class="badge bg-danger-soft text-danger"><i class="bi bi-exclamation-triangle"></i></span>
+                    </div>
+                    <h2 class="fw-bold mb-0">@(CalculateAvgBias())</h2>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card shadow-sm border-0 border-start border-info border-4 h-100">
+            <div class="card shadow-sm border-0 border-top border-info border-4 h-100">
                 <div class="card-body">
-                    <h6 class="text-muted text-uppercase fw-semibold mb-2">Audit Readiness</h6>
-                    <h2 class="display-6 mb-0">92%</h2>
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h6 class="text-muted text-uppercase fw-semibold small mb-0">Audit Status</h6>
+                        <span class="badge bg-info-soft text-info"><i class="bi bi-file-earmark-medical"></i></span>
+                    </div>
+                    <h2 class="fw-bold mb-0">READY</h2>
                 </div>
             </div>
         </div>
@@ -50,9 +70,12 @@
     <div class="row">
         <div class="col-12">
             <div class="card shadow-sm border-0">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center border-bottom">
                     <h5 class="mb-0 fw-bold">Recent Test Runs</h5>
-                    <a href="/reports" class="btn btn-sm btn-outline-primary">View All</a>
+                    <div class="d-flex gap-2">
+                        <a href="/test-runner" class="btn btn-sm btn-primary">New Test</a>
+                        <a href="/reports" class="btn btn-sm btn-outline-secondary">View All</a>
+                    </div>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -60,38 +83,54 @@
                             <thead class="table-light">
                                 <tr>
                                     <th class="ps-4">Run ID</th>
-                                    <th>Use Case</th>
+                                    <th>Dataset</th>
                                     <th>Model</th>
-                                    <th>Status</th>
+                                    <th>Pass Rate</th>
+                                    <th>Bias</th>
                                     <th>Date</th>
-                                    <th>Action</th>
+                                    <th class="text-end pe-4">Action</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr>
-                                    <td class="ps-4 font-monospace text-muted small">c3b1d6f5</td>
-                                    <td class="fw-medium">Customer Service RAG</td>
-                                    <td><span class="badge bg-light text-dark border">gpt-4o-mini</span></td>
-                                    <td><span class="badge bg-danger">Failed</span></td>
-                                    <td class="text-muted small">Just now</td>
-                                    <td><button class="btn btn-sm btn-link text-decoration-none">Report</button></td>
-                                </tr>
-                                <tr>
-                                    <td class="ps-4 font-monospace text-muted small">a8f9b2e1</td>
-                                    <td class="fw-medium">Credit Scoring Sandbox</td>
-                                    <td><span class="badge bg-light text-dark border">xgboost-v2</span></td>
-                                    <td><span class="badge bg-success">Passed</span></td>
-                                    <td class="text-muted small">2 hours ago</td>
-                                    <td><button class="btn btn-sm btn-link text-decoration-none">Report</button></td>
-                                </tr>
-                                <tr>
-                                    <td class="ps-4 font-monospace text-muted small">f4d2c8a9</td>
-                                    <td class="fw-medium">Fraud Detection Timeline</td>
-                                    <td><span class="badge bg-light text-dark border">random-forest</span></td>
-                                    <td><span class="badge bg-success">Passed</span></td>
-                                    <td class="text-muted small">Yesterday</td>
-                                    <td><button class="btn btn-sm btn-link text-decoration-none">Report</button></td>
-                                </tr>
+                                @if (!recentReports.Any())
+                                {
+                                    <tr>
+                                        <td colspan="7" class="text-center py-5 text-muted">
+                                            <i class="bi bi-inbox fs-2 d-block mb-2"></i>
+                                            No test reports found. Run your first evaluation!
+                                        </td>
+                                    </tr>
+                                }
+                                @foreach (var report in recentReports.Take(5))
+                                {
+                                    <tr>
+                                        <td class="ps-4 font-monospace text-muted small">@report.RunId.Substring(0, 8)</td>
+                                        <td class="fw-medium">@Path.GetFileName(report.DatasetPath)</td>
+                                        <td>
+                                            <span class="badge bg-light text-dark border">
+                                                @(report.ModelId.Contains("copilot") ? "🚀 " + report.ModelId : report.ModelId)
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @{
+                                                var rate = report.TotalTests > 0 ? (report.Passed * 100.0 / report.TotalTests) : 0;
+                                                var colorClass = rate > 80 ? "text-success" : rate > 50 ? "text-warning" : "text-danger";
+                                            }
+                                            <span class="fw-bold @colorClass">@rate.ToString("F0")%</span>
+                                        </td>
+                                        <td>
+                                            @{
+                                                var bias = report.AverageBiasScore;
+                                                var biasClass = bias < 0.2 ? "text-success" : bias < 0.5 ? "text-warning" : "text-danger";
+                                            }
+                                            <span class="@biasClass"><i class="bi bi-circle-fill small me-1"></i> @bias.ToString("F2")</span>
+                                        </td>
+                                        <td class="text-muted small">@report.CreatedAt.ToLocalTime().ToString("MMM dd, HH:mm")</td>
+                                        <td class="text-end pe-4">
+                                            <a href="/reports/@report.RunId" class="btn btn-sm btn-link text-decoration-none">Review</a>
+                                        </td>
+                                    </tr>
+                                }
                             </tbody>
                         </table>
                     </div>
@@ -100,3 +139,65 @@
         </div>
     </div>
 </div>
+
+<style>
+    .bg-primary-soft { background-color: rgba(13, 110, 253, 0.1); }
+    .bg-success-soft { background-color: rgba(25, 135, 84, 0.1); }
+    .bg-danger-soft { background-color: rgba(220, 53, 69, 0.1); }
+    .bg-info-soft { background-color: rgba(13, 202, 240, 0.1); }
+</style>
+
+@code {
+    private List<RunReport> recentReports = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var root = FindProjectRoot();
+        if (root != null)
+        {
+            var reportsDir = Path.Combine(root, "reports");
+            if (Directory.Exists(reportsDir))
+            {
+                var files = Directory.GetFiles(reportsDir, "*.json")
+                    .OrderByDescending(f => File.GetCreationTime(f))
+                    .ToList();
+
+                foreach (var file in files)
+                {
+                    try
+                    {
+                        var report = await RunReportWriter.LoadAsync(file);
+                        recentReports.Add(report);
+                    }
+                    catch { /* Skip malformed files */ }
+                }
+            }
+        }
+    }
+
+    private string? FindProjectRoot()
+    {
+        var current = new DirectoryInfo(Environment.CurrentDirectory);
+        while (current != null)
+        {
+            if (Directory.Exists(Path.Combine(current.FullName, "datasets")))
+                return current.FullName;
+            current = current.Parent;
+        }
+        return null;
+    }
+
+    private string CalculatePassRate()
+    {
+        if (!recentReports.Any()) return "0";
+        var total = recentReports.Sum(r => r.TotalTests);
+        var passed = recentReports.Sum(r => r.Passed);
+        return total > 0 ? (passed * 100.0 / total).ToString("F0") : "0";
+    }
+
+    private string CalculateAvgBias()
+    {
+        if (!recentReports.Any()) return "0.00";
+        return recentReports.Average(r => r.AverageBiasScore).ToString("F2");
+    }
+}

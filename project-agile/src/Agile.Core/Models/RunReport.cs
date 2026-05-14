@@ -21,5 +21,6 @@ public class RunReport
             return scored.Count > 0 ? scored.Average(r => r.RelevancyScore) : 0;
         }
     }
+    public double AverageBiasScore => Results.Count > 0 ? Results.Average(r => r.BiasScore) : 0;
     public string? ExecutiveSummary { get; set; }
 }
