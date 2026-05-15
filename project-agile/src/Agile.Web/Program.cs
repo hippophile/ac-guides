@@ -1,4 +1,7 @@
+using Agile.Core.Clients;
+using Agile.Core.Services;
 using Agile.Web.Components;
+using Agile.Web.Services;
 
 // Walk up the directory tree to find the .env file
 var currentDir = new System.IO.DirectoryInfo(Environment.CurrentDirectory);
@@ -20,6 +23,10 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+builder.Services.AddScoped<QuickDatasetGenerator>(_ =>
+    new QuickDatasetGenerator(new GitHubModelsClient("gpt-4.1")));
+builder.Services.AddScoped<QuickAuditRunner>();
 
 var app = builder.Build();
 

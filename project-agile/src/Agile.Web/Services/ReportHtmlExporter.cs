@@ -276,6 +276,17 @@ tr:hover{background:#f8f9fa;}
         return Doc($"AGILE Bias Audit — {r.RunId[..8]}", accentColor, sb.ToString());
     }
 
+    // ── QuickAudit CSV ───────────────────────────────────────────────────────
+
+    public static byte[] ExportQuickAuditCsv(List<QuickAuditDimensionResult> results)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("Dimension,BiasScore,Status,TestCaseCount");
+        foreach (var r in results.OrderByDescending(x => x.BiasScore))
+            sb.AppendLine($"{r.Dimension},{r.BiasScore:F4},{r.Status},{r.TestCaseCount}");
+        return Encoding.UTF8.GetBytes(sb.ToString());
+    }
+
     // ── ComparisonReport ──────────────────────────────────────────────────────
 
     public static string GenerateComparisonReport(ComparisonReport r)

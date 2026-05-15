@@ -74,6 +74,7 @@
             <a href="/bias-verdict" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
             <div class="d-flex gap-2">
                 <button class="btn btn-outline-success btn-sm" @onclick="ExportBiasReport"><i class="bi bi-download me-1"></i> Download Report</button>
+                <button class="btn btn-outline-secondary btn-sm" @onclick="ExportCsv" disabled="@(!currentReport.RawResults.Any())" title="@(currentReport.RawResults.Any() ? "" : "No raw data")"><i class="bi bi-filetype-csv me-1"></i> Export CSV</button>
                 <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteReport(currentReport.RunId)"><i class="bi bi-trash"></i> Delete Report</button>
             </div>
         </div>
@@ -384,6 +385,14 @@
         var html = ReportHtmlExporter.GenerateBiasVerdictReport(currentReport);
         var filename = $"agile-bias-audit-{currentReport.RunId[..8]}-{DateTime.Now:yyyy-MM-dd}.html";
         await JS.InvokeVoidAsync("printAsPdf", html);
+    }
+
+    private async Task ExportCsv()
+    {
+        if (currentReport == null || !currentReport.RawResults.Any()) return;
+        var csv = ReportCsvExporter.GenerateBiasVerdictCsv(currentReport);
+        var filename = $"agile-bias-{currentReport.RunId[..8]}-{DateTime.Now:yyyy-MM-dd}.csv";
+        await JS.InvokeVoidAsync("downloadCsv", filename, csv);
     }
 
     private void DeleteReport(string runId)

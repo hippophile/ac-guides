@@ -91,43 +91,60 @@ public class GitHubModelsClient : IModelClient
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _resolvedToken);
         request.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(20));
-
-        try
+        int[] retryDelays = [10, 20, 40];
+        for (int attempt = 0; attempt <= retryDelays.Length; attempt++)
         {
-            Console.WriteLine($"[HTTP] Calling {url} for {ModelId}...");
-            var response = await _httpClient.SendAsync(request, cts.Token);
+            using var requestCopy = new HttpRequestMessage(HttpMethod.Post, url);
+            requestCopy.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _resolvedToken);
+            requestCopy.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
-            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(120));
+
+            try
             {
-                Console.WriteLine($"[HTTP] RATE LIMIT REACHED! Status: {response.StatusCode}");
-                throw new Exception("RATE_LIMIT_REACHED");
-            }
+                Console.WriteLine($"[HTTP] Calling {url} for {ModelId}...");
+                var response = await _httpClient.SendAsync(requestCopy, cts.Token);
 
-            if (!response.IsSuccessStatusCode)
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                {
+                    if (attempt < retryDelays.Length)
+                    {
+                        var wait = retryDelays[attempt];
+                        Console.WriteLine($"[HTTP] RATE LIMIT — retrying in {wait}s (attempt {attempt + 1}/{retryDelays.Length})...");
+                        await Task.Delay(TimeSpan.FromSeconds(wait), ct);
+                        continue;
+                    }
+                    Console.WriteLine("[HTTP] RATE LIMIT REACHED! All retries exhausted.");
+                    throw new Exception("RATE_LIMIT_REACHED");
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    Console.WriteLine($"[HTTP] ERROR: {response.StatusCode} - {error}");
+                    throw new Exception($"API Error ({response.StatusCode}): {error}");
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                using var doc = JsonDocument.Parse(json);
+                var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+
+                Console.WriteLine("[HTTP] Success.");
+                return content ?? string.Empty;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
             {
-                var error = await response.Content.ReadAsStringAsync();
-                Console.WriteLine($"[HTTP] ERROR: {response.StatusCode} - {error}");
-                throw new Exception($"API Error ({response.StatusCode}): {error}");
+                Console.WriteLine("[HTTP] TIMEOUT!");
+                throw new TimeoutException("The AI model took too long to respond (> 120s). Check your internet or API key.");
             }
+            catch (Exception ex) when (ex.Message != "RATE_LIMIT_REACHED")
+            {
+                Console.WriteLine($"[HTTP] CRITICAL: {ex.Message}");
+                throw;
+            }
+        }
 
-            var json = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(json);
-            var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
-
-            Console.WriteLine("[HTTP] Success.");
-            return content ?? string.Empty;
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-        {
-            Console.WriteLine("[HTTP] TIMEOUT!");
-            throw new TimeoutException("The AI model took too long to respond (> 20s). Check your internet or API key.");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[HTTP] CRITICAL: {ex.Message}");
-            throw;
-        }
+        throw new Exception("RATE_LIMIT_REACHED");
     }
 }

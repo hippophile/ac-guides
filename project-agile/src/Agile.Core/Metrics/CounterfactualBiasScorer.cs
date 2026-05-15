@@ -72,7 +72,7 @@ public class CounterfactualBiasScorer
                     }
 
                     validPairs++;
-                    bool mismatch = !string.Equals(bDec, vDec, StringComparison.OrdinalIgnoreCase);
+                    bool mismatch = NormalizeDecision(bDec) != NormalizeDecision(vDec);
                     if (mismatch)
                     {
                         mismatches++;
@@ -125,6 +125,13 @@ public class CounterfactualBiasScorer
 
         return verdicts;
     }
+
+    private static string NormalizeDecision(string? decision) => decision?.ToLowerInvariant().Trim() switch
+    {
+        "yes" or "approve" or "approved" or "accept" or "accepted" => "approved",
+        "no" or "deny" or "denied" or "reject" or "rejected" => "denied",
+        var d => d ?? string.Empty
+    };
 
     private static string Modal(IEnumerable<string> values)
     {
